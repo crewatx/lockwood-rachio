@@ -5,6 +5,25 @@ const state = {
   session: null
 };
 
+const mapLayout = [
+  { left: 10, top: 10, width: 18, height: 14 },
+  { left: 32, top: 8, width: 20, height: 13 },
+  { left: 58, top: 9, width: 18, height: 13 },
+  { left: 78, top: 17, width: 14, height: 18 },
+  { left: 8, top: 40, width: 14, height: 20 },
+  { left: 22, top: 35, width: 14, height: 23 },
+  { left: 28, top: 66, width: 32, height: 17 },
+  { left: 80, top: 50, width: 12, height: 16 },
+  { left: 10, top: 64, width: 15, height: 23 },
+  { left: 58, top: 61, width: 12, height: 12 },
+  { left: 70, top: 67, width: 12, height: 15 },
+  { left: 82, top: 35, width: 11, height: 13 },
+  { left: 6, top: 72, width: 16, height: 15 },
+  { left: 30, top: 86, width: 28, height: 9 },
+  { left: 58, top: 83, width: 22, height: 11 },
+  { left: 84, top: 70, width: 10, height: 15 }
+];
+
 const elements = {
   authScreen: document.querySelector("#auth-screen"),
   dashboardShell: document.querySelector("#dashboard-shell"),
@@ -12,25 +31,56 @@ const elements = {
   loginError: document.querySelector("#login-error"),
   passwordInput: document.querySelector("#password-input"),
   logoutButton: document.querySelector("#logout-button"),
-  connectionPill: document.querySelector("#connection-pill"),
   refreshButton: document.querySelector("#refresh-button"),
-  setupBanner: document.querySelector("#setup-banner"),
+  stopAllButton: document.querySelector("#stop-all-button"),
+  pauseButton: document.querySelector("#pause-button"),
+  runFirstZoneButton: document.querySelector("#run-first-zone-button"),
+  refreshWeatherButton: document.querySelector("#refresh-weather-button"),
+  systemPill: document.querySelector("#system-pill"),
+  currentDate: document.querySelector("#current-date"),
+  currentTime: document.querySelector("#current-time"),
+  dashboardTitle: document.querySelector("#dashboard-title"),
   controllerName: document.querySelector("#controller-name"),
-  controllerDetail: document.querySelector("#controller-detail"),
-  activeZone: document.querySelector("#active-zone"),
-  activeZoneDetail: document.querySelector("#active-zone-detail"),
-  nextRun: document.querySelector("#next-run"),
-  nextRunDetail: document.querySelector("#next-run-detail"),
-  zoneCount: document.querySelector("#zone-count"),
-  zoneCountDetail: document.querySelector("#zone-count-detail"),
+  controllerStatus: document.querySelector("#controller-status"),
+  controllerId: document.querySelector("#controller-id"),
+  controllerTimezone: document.querySelector("#controller-timezone"),
+  activeZoneName: document.querySelector("#active-zone-name"),
+  activeZoneTime: document.querySelector("#active-zone-time"),
+  activeZoneStart: document.querySelector("#active-zone-start"),
+  activeZoneEnd: document.querySelector("#active-zone-end"),
+  activeZoneMeter: document.querySelector("#active-zone-meter"),
+  weatherTemp: document.querySelector("#weather-temp"),
+  weatherCondition: document.querySelector("#weather-condition"),
+  weatherLocation: document.querySelector("#weather-location"),
+  weatherHumidity: document.querySelector("#weather-humidity"),
+  weatherWind: document.querySelector("#weather-wind"),
+  weatherGust: document.querySelector("#weather-gust"),
+  weatherRain: document.querySelector("#weather-rain"),
+  weatherPressure: document.querySelector("#weather-pressure"),
+  recommendationTitle: document.querySelector("#recommendation-title"),
+  recommendationDetail: document.querySelector("#recommendation-detail"),
+  recommendationList: document.querySelector("#recommendation-list"),
+  nextWindow: document.querySelector("#next-window"),
+  wateringDays: document.querySelector("#watering-days"),
+  wateringHours: document.querySelector("#watering-hours"),
+  zoneCountTitle: document.querySelector("#zone-count-title"),
   deviceSelect: document.querySelector("#device-select"),
-  zonesGrid: document.querySelector("#zones-grid"),
+  zoneGrid: document.querySelector("#zone-grid"),
+  yardMap: document.querySelector("#yard-map"),
+  ruleStage: document.querySelector("#rule-stage"),
+  ruleDays: document.querySelector("#rule-days"),
+  ruleHours: document.querySelector("#rule-hours"),
+  ruleNote: document.querySelector("#rule-note"),
+  conditionTable: document.querySelector("#condition-table"),
+  decisionList: document.querySelector("#decision-list"),
   scheduleList: document.querySelector("#schedule-list"),
   activityList: document.querySelector("#activity-list"),
-  zoneTemplate: document.querySelector("#zone-card-template")
+  rainfallChart: document.querySelector("#rainfall-chart"),
+  rainTotal: document.querySelector("#rain-total")
 };
 
 elements.refreshButton.addEventListener("click", () => loadDashboard());
+elements.refreshWeatherButton.addEventListener("click", () => loadDashboard());
 elements.loginForm.addEventListener("submit", (event) => {
   event.preventDefault();
   login();
@@ -40,8 +90,12 @@ elements.deviceSelect.addEventListener("change", (event) => {
   state.selectedDeviceId = event.target.value;
   render();
 });
+elements.stopAllButton.addEventListener("click", () => stopAllWatering());
+elements.runFirstZoneButton.addEventListener("click", () => runFirstEnabledZone());
 
 init();
+updateClock();
+window.setInterval(updateClock, 30_000);
 window.setInterval(() => {
   if (state.session?.authenticated) {
     loadDashboard({ quiet: true });
@@ -137,23 +191,56 @@ async function stopZone(zoneId) {
   }
 }
 
-function render() {
-  const selectedDevice = getSelectedDevice();
-  renderConnection();
-  renderDeviceSelect();
-  renderOverview(selectedDevice);
-  renderZones();
-  renderSchedules(selectedDevice);
-  renderActivity();
+async function stopAllWatering() {
+  const device = getSelectedDevice();
+  if (!device) return;
+  elements.stopAllButton.disabled = true;
+  try {
+    await api(`/api/devices/${encodeURIComponent(device.id)}/stop`, { method: "POST" });
+    await loadDashboard({ quiet: true });
+  } catch (error) {
+    showActionError(error);
+  } finally {
+    elements.stopAllButton.disabled = false;
+  }
 }
 
-function renderConnection() {
-  const { connectionPill, setupBanner } = elements;
-  if (!state.data) return;
+function runFirstEnabledZone() {
+  const zone = getSelectedDevice()?.zones?.find((item) => item.enabled);
+  if (zone) {
+    startZone(zone.id, 300);
+  }
+}
 
-  connectionPill.className = `pill ${state.data.demo ? "demo" : "live"}`;
-  connectionPill.textContent = state.data.demo ? "Demo" : "Live";
-  setupBanner.classList.toggle("hidden", !state.data.demo);
+function render() {
+  const device = getSelectedDevice();
+  const zones = device?.zones || [];
+  renderSystem(device, zones);
+  renderDeviceSelect();
+  renderWateringNow(device, zones);
+  renderWeather();
+  renderRecommendation();
+  renderRules();
+  renderZones();
+  renderYardMap();
+  renderConditionTable();
+  renderSchedules(device);
+  renderActivity();
+  renderRainfall();
+}
+
+function renderSystem(device, zones) {
+  const runningZone = zones.find((zone) => zone.running);
+  const online = device?.status !== "offline";
+  elements.dashboardTitle.textContent = `${zones.length || "--"} Zone System`;
+  elements.controllerName.textContent = device?.name || "No controller";
+  elements.controllerStatus.textContent = online ? "Online" : "Offline";
+  elements.controllerStatus.className = `inline-status ${online ? "online" : "offline"}`;
+  elements.controllerId.textContent = device?.id ? shortId(device.id) : "--";
+  elements.controllerTimezone.textContent = device?.timeZone || "--";
+  elements.zoneCountTitle.textContent = `${zones.length || 0} zones`;
+  elements.systemPill.textContent = runningZone ? "Watering Active" : online ? "System Healthy" : "System Offline";
+  elements.systemPill.className = `status-pill ${runningZone ? "active" : online ? "healthy" : "error"}`;
 }
 
 function renderDeviceSelect() {
@@ -170,155 +257,215 @@ function renderDeviceSelect() {
   elements.deviceSelect.disabled = devices.length <= 1;
 }
 
-function renderOverview(device) {
-  const zones = device?.zones || [];
-  const enabledZones = zones.filter((zone) => zone.enabled);
+function renderWateringNow(device, zones) {
   const runningZone = zones.find((zone) => zone.running);
-  const nextSchedule = getNextSchedule(device);
+  if (!runningZone) {
+    elements.activeZoneName.textContent = "No active zone";
+    elements.activeZoneTime.textContent = "--";
+    elements.activeZoneStart.textContent = "--";
+    elements.activeZoneEnd.textContent = "--";
+    elements.activeZoneMeter.style.width = "0%";
+    elements.pauseButton.disabled = true;
+    return;
+  }
 
-  elements.controllerName.textContent = device?.name || "No controller";
-  elements.controllerDetail.textContent = device
-    ? `${titleCase(device.status)} - ${device.timeZone || "Timezone unavailable"}`
-    : "Connect a Rachio account";
+  elements.activeZoneName.textContent = `Zone ${runningZone.number || ""} - ${runningZone.name}`.trim();
+  const endsAt = runningZone.runningUntil ? new Date(runningZone.runningUntil) : null;
+  const remainingMs = endsAt ? Math.max(0, endsAt.getTime() - Date.now()) : null;
+  elements.activeZoneTime.textContent = remainingMs === null ? "Running" : formatClockDuration(remainingMs);
+  elements.activeZoneStart.textContent = "--";
+  elements.activeZoneEnd.textContent = endsAt ? formatTime(endsAt) : "--";
+  elements.activeZoneMeter.style.width = remainingMs === null ? "65%" : `${Math.max(8, Math.min(100, remainingMs / 6000))}%`;
+  elements.pauseButton.disabled = true;
+}
 
-  elements.activeZone.textContent = runningZone?.name || "None";
-  elements.activeZoneDetail.textContent = runningZone?.runningUntil
-    ? `Ends ${formatTime(runningZone.runningUntil)}`
-    : "System idle";
+function renderWeather() {
+  const weather = state.data?.weather || {};
+  elements.weatherTemp.textContent = weather.temperatureF === null || weather.temperatureF === undefined ? "--" : `${weather.temperatureF}\u00b0F`;
+  elements.weatherCondition.textContent = weather.condition || "Weather unavailable";
+  elements.weatherLocation.textContent = `${weather.source || "Weather"}${weather.location ? ` - ${weather.location}` : ""}`;
+  elements.weatherHumidity.textContent = weather.humidity === null || weather.humidity === undefined ? "--" : `${weather.humidity}%`;
+  elements.weatherWind.textContent = weather.windMph === null || weather.windMph === undefined ? "--" : `${weather.windMph} mph`;
+  elements.weatherGust.textContent = weather.gustMph === null || weather.gustMph === undefined ? "--" : `${weather.gustMph} mph`;
+  elements.weatherRain.textContent = weather.rainTodayIn === null || weather.rainTodayIn === undefined ? "--" : `${weather.rainTodayIn.toFixed(2)} in`;
+  elements.weatherPressure.textContent = weather.pressureInHg === null || weather.pressureInHg === undefined ? "--" : `${weather.pressureInHg.toFixed(2)} inHg`;
+}
 
-  elements.nextRun.textContent = nextSchedule ? formatDateTime(nextSchedule.startDate, nextSchedule.startTime) : "--";
-  elements.nextRunDetail.textContent = nextSchedule
-    ? `${nextSchedule.name} - ${formatDuration(nextSchedule.totalDuration)}`
-    : "No enabled schedule";
+function renderRecommendation() {
+  const recommendation = state.data?.recommendation || {};
+  elements.recommendationTitle.textContent = recommendation.title || "Weather check unavailable";
+  elements.recommendationDetail.textContent = recommendation.detail || "No recommendation loaded.";
+  elements.recommendationTitle.dataset.tone = recommendation.tone || "normal";
+  renderList(elements.recommendationList, recommendation.bullets || []);
+}
 
-  elements.zoneCount.textContent = enabledZones.length.toString();
-  elements.zoneCountDetail.textContent = `${zones.length} total`;
+function renderRules() {
+  const rules = state.data?.rules || {};
+  elements.nextWindow.textContent = rules.nextAllowedWindow ? formatWindow(rules.nextAllowedWindow) : "--";
+  elements.wateringDays.textContent = `Allowed watering days: ${rules.allowedDays || "--"}`;
+  elements.wateringHours.textContent = `No outdoor watering: ${rules.restrictedHours || "--"}`;
+  elements.ruleStage.textContent = rules.stage || "--";
+  elements.ruleDays.textContent = rules.allowedDays || "--";
+  elements.ruleHours.textContent = rules.restrictedHours || "--";
+  elements.ruleNote.textContent = rules.note || "Verify current local rules.";
 }
 
 function renderZones() {
   const device = getSelectedDevice();
   const zones = device?.zones || [];
-
   if (!zones.length) {
-    elements.zonesGrid.innerHTML = `<div class="empty-state">No zones found for this controller.</div>`;
+    elements.zoneGrid.replaceChildren(emptyBlock("No zones found for this controller."));
     return;
   }
 
-  const cards = zones.map((zone) => {
-    const fragment = elements.zoneTemplate.content.cloneNode(true);
-    const card = fragment.querySelector(".zone-card");
-    const stateLabel = fragment.querySelector(".zone-state");
-    const meter = fragment.querySelector(".zone-meter span");
+  elements.zoneGrid.replaceChildren(
+    ...zones.map((zone) => {
+      const card = document.createElement("article");
+      const status = zone.running ? "running" : zone.enabled ? "scheduled" : "off";
+      card.className = `zone-tile ${status}`;
+      card.innerHTML = `
+        <strong></strong>
+        <span class="zone-name"></span>
+        <small></small>
+        <div class="zone-tile-actions"></div>
+      `;
+      card.querySelector("strong").textContent = zone.number || "--";
+      card.querySelector(".zone-name").textContent = zone.name;
+      card.querySelector("small").textContent = zone.running ? "Running" : zone.enabled ? "Ready" : "Off";
 
-    card.dataset.zoneId = zone.id;
-    card.classList.toggle("disabled", !zone.enabled);
-    fragment.querySelector(".zone-number").textContent = zone.number ? `Zone ${zone.number}` : "Zone";
-    fragment.querySelector("h3").textContent = zone.name;
+      const actions = card.querySelector(".zone-tile-actions");
+      const actionButton = document.createElement("button");
+      actionButton.type = "button";
+      actionButton.textContent = zone.running ? "Stop" : "Run 5m";
+      actionButton.disabled = (!zone.running && !zone.enabled) || state.busyZoneId === zone.id;
+      actionButton.addEventListener("click", () => (zone.running ? stopZone(zone.id) : startZone(zone.id, 300)));
+      actions.replaceChildren(actionButton);
+      return card;
+    })
+  );
+}
 
-    stateLabel.textContent = zone.running ? "Running" : zone.enabled ? "Ready" : "Paused";
-    stateLabel.classList.toggle("running", Boolean(zone.running));
-    stateLabel.classList.toggle("paused", !zone.enabled);
+function renderYardMap() {
+  const zones = getSelectedDevice()?.zones || [];
+  const house = document.createElement("div");
+  house.className = "map-house";
+  const driveway = document.createElement("div");
+  driveway.className = "map-driveway";
+  const beds = document.createElement("div");
+  beds.className = "map-beds";
 
-    fragment.querySelector(".zone-type").textContent = zone.type || "Mixed";
-    fragment.querySelector(".zone-soil").textContent = zone.soilType || "Unknown";
-    fragment.querySelector(".zone-efficiency").textContent = formatPercent(zone.efficiency);
-    meter.style.width = `${meterWidth(zone)}%`;
-
-    const buttons = fragment.querySelectorAll("button");
-    buttons.forEach((button) => {
-      const isStop = button.hasAttribute("data-stop");
-      button.disabled = state.busyZoneId === zone.id || (!zone.enabled && !isStop) || (isStop && !zone.running);
-      if (isStop) {
-        button.addEventListener("click", () => stopZone(zone.id));
-      } else {
-        button.addEventListener("click", () => startZone(zone.id, Number(button.dataset.duration)));
-      }
+  const zoneEls = zones.map((zone, index) => {
+    const layout = mapLayout[index % mapLayout.length];
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `map-zone ${zone.running ? "running" : zone.enabled ? "scheduled" : "off"}`;
+    button.style.left = `${layout.left}%`;
+    button.style.top = `${layout.top}%`;
+    button.style.width = `${layout.width}%`;
+    button.style.height = `${layout.height}%`;
+    button.title = zone.name;
+    button.textContent = zone.number || index + 1;
+    button.addEventListener("click", () => {
+      if (zone.enabled) startZone(zone.id, 300);
     });
-
-    return fragment;
+    return button;
   });
 
-  elements.zonesGrid.replaceChildren(...cards);
+  elements.yardMap.replaceChildren(house, driveway, beds, ...zoneEls);
+}
+
+function renderConditionTable() {
+  const weather = state.data?.weather || {};
+  const rainSoon = (weather.hourly || []).some((hour) => Number(hour.precipitationChance) >= 50);
+  const rows = [
+    ["Rain Skip", "On", rainSoon || Number(weather.rainTodayIn || 0) > 0.15 ? "Yes" : "No", rainSoon ? "Note" : "Agree"],
+    ["Wind Skip", "On", Number(weather.windMph || 0) >= 20 ? "Yes" : "No", Number(weather.windMph || 0) >= 20 ? "Note" : "Agree"],
+    ["Forecast Shower", "Auto", rainSoon ? "Yes" : "No", rainSoon ? "Watch" : "Agree"],
+    ["Seasonal Adjust", "100%", "NWS", weather.status === "ok" ? "Agree" : "Fallback"]
+  ];
+  elements.conditionTable.replaceChildren(
+    ...rows.map(([condition, rachio, source, status]) => {
+      const row = document.createElement("tr");
+      row.innerHTML = "<td></td><td></td><td></td><td></td>";
+      row.children[0].textContent = condition;
+      row.children[1].textContent = rachio;
+      row.children[2].textContent = source;
+      row.children[3].textContent = status;
+      row.children[3].className = status === "Agree" ? "agree" : "note";
+      return row;
+    })
+  );
+  renderList(elements.decisionList, [
+    state.data?.recommendation?.detail || "No weather decision loaded.",
+    `Weather source: ${weather.source || "NWS"}`,
+    `Restricted hours: ${state.data?.rules?.restrictedHours || "--"}`,
+    "Manual runs remain available after login"
+  ]);
 }
 
 function renderSchedules(device) {
   const schedules = device?.scheduleRules || [];
   if (!schedules.length) {
-    elements.scheduleList.innerHTML = `<div class="empty-state">No schedules loaded.</div>`;
+    elements.scheduleList.replaceChildren(emptyBlock("No schedules loaded."));
     return;
   }
-
   elements.scheduleList.replaceChildren(
-    ...schedules.map((schedule) => {
-      const card = document.createElement("article");
-      card.className = "schedule-card";
-      const statusClass = schedule.enabled ? "live" : "paused";
-      card.innerHTML = `
-        <header>
-          <h3></h3>
-          <span class="schedule-status ${statusClass}"></span>
-        </header>
-        <p></p>
-      `;
-      card.querySelector("h3").textContent = schedule.name;
-      card.querySelector(".schedule-status").textContent = schedule.enabled ? "On" : "Paused";
-      card.querySelector("p").textContent = `${formatDateTime(schedule.startDate, schedule.startTime)} - ${formatDuration(schedule.totalDuration)} - ${schedule.zones.length} zones`;
-      return card;
-    })
+    ...schedules.slice(0, 5).map((schedule) =>
+      dataRow(schedule.name, `${formatDateTime(schedule.startDate, schedule.startTime)} - ${formatDuration(schedule.totalDuration)}`, schedule.enabled ? "On" : "Paused")
+    )
   );
 }
 
 function renderActivity() {
   const activity = state.data?.activity || [];
   if (!activity.length) {
-    elements.activityList.innerHTML = `<li class="empty-state">No activity yet.</li>`;
+    elements.activityList.replaceChildren(emptyBlock("No recent activity."));
     return;
   }
-
   elements.activityList.replaceChildren(
-    ...activity.map((item) => {
-      const row = document.createElement("li");
-      row.innerHTML = `
-        <span class="activity-dot ${item.tone || ""}" aria-hidden="true"></span>
-        <div>
-          <p class="activity-title"></p>
-          <div class="activity-time"></div>
-        </div>
-      `;
-      row.querySelector(".activity-title").textContent = item.label || "Rachio event";
-      row.querySelector(".activity-time").textContent = relativeTime(item.when);
-      return row;
+    ...activity.slice(0, 5).map((item) => dataRow(item.label || "Rachio event", relativeTime(item.when), item.tone || "Event"))
+  );
+}
+
+function renderRainfall() {
+  const history = state.data?.weather?.rainfallHistory || [];
+  const knownAmounts = history.map((item) => item.amount).filter((value) => Number.isFinite(Number(value)));
+  const max = Math.max(0.1, ...knownAmounts);
+  const total = knownAmounts.reduce((sum, value) => sum + Number(value), 0);
+  elements.rainTotal.textContent = knownAmounts.length ? `${total.toFixed(2)} in total` : "Unavailable";
+  elements.rainfallChart.replaceChildren(
+    ...history.map((item) => {
+      const bar = document.createElement("div");
+      const amount = Number(item.amount);
+      bar.className = "rain-bar";
+      bar.innerHTML = "<span></span><strong></strong><small></small>";
+      bar.querySelector("span").style.height = Number.isFinite(amount) ? `${Math.max(4, (amount / max) * 100)}%` : "4%";
+      bar.querySelector("strong").textContent = Number.isFinite(amount) ? amount.toFixed(2) : "--";
+      bar.querySelector("small").textContent = formatShortDay(item.date);
+      return bar;
     })
   );
 }
 
 function renderError(error) {
-  elements.connectionPill.className = "pill error";
-  elements.connectionPill.textContent = "Error";
+  elements.systemPill.className = "status-pill error";
+  elements.systemPill.textContent = "Error";
   elements.controllerName.textContent = "Unable to load";
-  elements.controllerDetail.textContent = error.message;
-  elements.activeZone.textContent = "--";
-  elements.activeZoneDetail.textContent = "Check server settings";
-  elements.nextRun.textContent = "--";
-  elements.nextRunDetail.textContent = "Unavailable";
-  elements.zoneCount.textContent = "--";
-  elements.zoneCountDetail.textContent = "Unavailable";
-  elements.zonesGrid.innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`;
-  elements.scheduleList.innerHTML = `<div class="empty-state">Schedules unavailable.</div>`;
-  elements.activityList.innerHTML = `<li class="empty-state">Activity unavailable.</li>`;
+  elements.controllerStatus.textContent = error.message;
+  elements.zoneGrid.replaceChildren(emptyBlock(error.message));
 }
 
 function showActionError(error) {
-  elements.connectionPill.className = "pill error";
-  elements.connectionPill.textContent = error.message.slice(0, 28);
-  window.setTimeout(renderConnection, 3000);
+  elements.systemPill.className = "status-pill error";
+  elements.systemPill.textContent = error.message.slice(0, 30);
+  window.setTimeout(() => renderSystem(getSelectedDevice(), getSelectedDevice()?.zones || []), 3000);
 }
 
 function setLoading(loading, quiet) {
   elements.refreshButton.disabled = loading;
   if (loading && !quiet) {
-    elements.connectionPill.className = "pill neutral";
-    elements.connectionPill.textContent = "Loading";
+    elements.systemPill.className = "status-pill loading";
+    elements.systemPill.textContent = "Loading";
   }
 }
 
@@ -355,31 +502,57 @@ function getSelectedDevice() {
   return state.data?.devices?.find((device) => device.id === state.selectedDeviceId) || state.data?.devices?.[0] || null;
 }
 
-function getNextSchedule(device) {
-  return (device?.scheduleRules || [])
-    .filter((schedule) => schedule.enabled)
-    .sort((a, b) => scheduleTime(a) - scheduleTime(b))[0];
+function renderList(container, items) {
+  container.replaceChildren(
+    ...items.map((item) => {
+      const li = document.createElement("li");
+      li.textContent = item;
+      return li;
+    })
+  );
 }
 
-function scheduleTime(schedule) {
-  if (!schedule?.startDate) return Number.MAX_SAFE_INTEGER;
-  const date = new Date(schedule.startDate);
-  if (schedule.startTime) {
-    const [hours, minutes] = schedule.startTime.split(":").map(Number);
-    if (Number.isFinite(hours)) date.setHours(hours);
-    if (Number.isFinite(minutes)) date.setMinutes(minutes);
-  }
-  return date.getTime();
+function dataRow(title, detail, meta) {
+  const row = document.createElement("div");
+  row.className = "data-row";
+  row.innerHTML = "<strong></strong><span></span><em></em>";
+  row.querySelector("strong").textContent = title;
+  row.querySelector("span").textContent = detail;
+  row.querySelector("em").textContent = meta;
+  return row;
 }
 
-function meterWidth(zone) {
-  if (Number.isFinite(Number(zone.saturatedDepthOfWater))) {
-    return clamp(Number(zone.saturatedDepthOfWater) * 100, 18, 100);
-  }
-  if (Number.isFinite(Number(zone.efficiency))) {
-    return clamp(Number(zone.efficiency) * 100, 18, 100);
-  }
-  return 48;
+function emptyBlock(message) {
+  const block = document.createElement("div");
+  block.className = "empty-state";
+  block.textContent = message;
+  return block;
+}
+
+function updateClock() {
+  const now = new Date();
+  elements.currentDate.textContent = new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric"
+  }).format(now);
+  elements.currentTime.textContent = new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short"
+  }).format(now);
+}
+
+function shortId(value) {
+  return String(value).slice(0, 8).toUpperCase();
+}
+
+function formatWindow(date) {
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(new Date(date));
 }
 
 function formatDateTime(date, time) {
@@ -405,6 +578,13 @@ function formatTime(date) {
   }).format(new Date(date));
 }
 
+function formatClockDuration(milliseconds) {
+  const totalSeconds = Math.ceil(milliseconds / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
 function formatDuration(seconds) {
   const total = Number(seconds || 0);
   if (!total) return "0m";
@@ -415,10 +595,8 @@ function formatDuration(seconds) {
   return rest ? `${hours}h ${rest}m` : `${hours}h`;
 }
 
-function formatPercent(value) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return "Unknown";
-  return `${Math.round(number * 100)}%`;
+function formatShortDay(date) {
+  return new Intl.DateTimeFormat(undefined, { weekday: "short", month: "numeric", day: "numeric" }).format(new Date(date));
 }
 
 function relativeTime(date) {
@@ -437,27 +615,4 @@ function relativeTime(date) {
     }
   }
   return "Just now";
-}
-
-function titleCase(value) {
-  return String(value || "")
-    .replace(/[-_]/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
-}
-
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (character) => {
-    const entities = {
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;"
-    };
-    return entities[character];
-  });
 }
