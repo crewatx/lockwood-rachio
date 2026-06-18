@@ -2,9 +2,9 @@
   "name": "rachio-ocean-dashboard",
   "version": "1.0.0",
   "description": "A DigitalOcean-ready dashboard for monitoring and controlling a Rachio irrigation system.",
-  "main": "server.js",
+  "main": "server-wrapper.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node server-wrapper.js",
     "dev": "node server.js",
     "smoke": "node scripts/smoke-test.js"
   },
