@@ -32,6 +32,7 @@
           <a href="#yard">Yard Map</a>
           <a href="#schedule">Schedule</a>
           <a href="#weather">Weather</a>
+          <a href="#forecast">Forecast</a>
           <a href="#rules">Rules</a>
           <a href="#actions">Actions</a>
         </nav>
@@ -136,22 +137,42 @@
         </section>
 
         <section class="dashboard-grid">
-          <article class="panel zone-panel" id="zones">
-            <div class="panel-heading">
-              <div>
-                <div class="panel-title">Zone Status</div>
-                <h2 id="zone-count-title">-- zones</h2>
+          <div class="left-stack">
+            <article class="panel zone-panel" id="zones">
+              <div class="panel-heading">
+                <div>
+                  <div class="panel-title">Zone Status</div>
+                  <h2 id="zone-count-title">-- zones</h2>
+                </div>
+                <select id="device-select" aria-label="Controller"></select>
               </div>
-              <select id="device-select" aria-label="Controller"></select>
-            </div>
-            <div id="zone-grid" class="zone-grid" aria-live="polite"></div>
-            <div class="legend">
-              <span><i class="running"></i>Running</span>
-              <span><i class="scheduled"></i>Ready</span>
-              <span><i class="off"></i>Off</span>
-              <span><i class="delay"></i>Delay</span>
-            </div>
-          </article>
+              <div id="zone-grid" class="zone-grid" aria-live="polite"></div>
+              <div class="legend">
+                <span><i class="running"></i>Running</span>
+                <span><i class="scheduled"></i>Ready</span>
+                <span><i class="off"></i>Off</span>
+              </div>
+            </article>
+
+            <article class="panel forecast-panel" id="forecast">
+              <div class="panel-heading">
+                <div>
+                  <div class="panel-title">7 Day Forecast</div>
+                  <h2 id="forecast-summary">Rain outlook</h2>
+                </div>
+                <span id="forecast-updated" class="map-hint">--</span>
+              </div>
+              <div id="forecast-grid" class="forecast-grid"></div>
+              <div class="panel-heading rainfall-heading">
+                <div>
+                  <div class="panel-title">Measured Rainfall</div>
+                  <h2>Last 7 Days</h2>
+                </div>
+                <span id="rain-total" class="map-hint">-- total</span>
+              </div>
+              <div id="rainfall-chart" class="rainfall-chart compact"></div>
+            </article>
+          </div>
 
           <article class="panel map-panel" id="yard">
             <div class="panel-heading">
@@ -211,16 +232,6 @@
             <div id="activity-list" class="data-list"></div>
           </article>
 
-          <article class="panel rainfall-panel">
-            <div class="panel-heading">
-              <div>
-                <div class="panel-title">Rainfall</div>
-                <h2>Last 7 Days</h2>
-              </div>
-              <span id="rain-total" class="map-hint">-- total</span>
-            </div>
-            <div id="rainfall-chart" class="rainfall-chart"></div>
-          </article>
         </section>
 
         <footer class="dashboard-footer">
