@@ -3,18 +3,16 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Rachio Ocean</title>
+    <title>Lockwood Rachio</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <section id="auth-screen" class="auth-screen hidden" aria-labelledby="auth-heading">
       <form id="login-form" class="auth-card">
         <div class="brand auth-brand">
-          <div class="brand-mark" aria-hidden="true">
-            <span></span>
-          </div>
+          <div class="brand-mark" aria-hidden="true">r</div>
           <div>
-            <p>Rachio Ocean</p>
+            <p>Lockwood Rachio</p>
             <h1 id="auth-heading">Dashboard Login</h1>
           </div>
         </div>
@@ -25,130 +23,212 @@
       </form>
     </section>
 
-    <div id="dashboard-shell" class="app-shell hidden">
-      <header class="topbar">
-        <div class="brand">
-          <div class="brand-mark" aria-hidden="true">
-            <span></span>
-          </div>
-          <div>
-            <p>Rachio Ocean</p>
-            <h1>Irrigation Dashboard</h1>
-          </div>
+    <div id="dashboard-shell" class="dashboard-shell hidden">
+      <aside class="sidebar" aria-label="Navigation">
+        <div class="sidebar-logo">r</div>
+        <nav class="side-nav">
+          <a class="active" href="#overview">Dashboard</a>
+          <a href="#zones">Zones</a>
+          <a href="#yard">Yard Map</a>
+          <a href="#schedule">Schedule</a>
+          <a href="#weather">Weather</a>
+          <a href="#rules">Rules</a>
+          <a href="#actions">Actions</a>
+        </nav>
+        <div class="sidebar-foot">
+          <span>Rachio</span>
+          <small>NWS weather</small>
         </div>
-        <div class="topbar-actions">
-          <span id="connection-pill" class="pill neutral">Loading</span>
-          <button id="logout-button" class="secondary-button hidden" type="button">Sign Out</button>
-          <button id="refresh-button" class="icon-button" type="button" title="Refresh dashboard" aria-label="Refresh dashboard">
-            <span aria-hidden="true">&#8635;</span>
-          </button>
-        </div>
-      </header>
+      </aside>
 
-      <main>
-        <section class="overview-grid" aria-label="Overview">
-          <article class="metric-panel controller-panel">
-            <span class="label">Controller</span>
-            <div>
+      <main class="dashboard-main">
+        <header class="dashboard-header" id="overview">
+          <div>
+            <p class="eyebrow">Lockwood Dashboard</p>
+            <h1 id="dashboard-title">Rachio Irrigation Control</h1>
+          </div>
+          <div class="header-meta">
+            <span id="system-pill" class="status-pill loading">Loading</span>
+            <span id="current-date">--</span>
+            <span id="current-time">--</span>
+            <button id="logout-button" class="text-button hidden" type="button">Sign Out</button>
+            <button id="refresh-button" class="icon-button" type="button" title="Refresh dashboard" aria-label="Refresh dashboard">
+              <span aria-hidden="true">&#8635;</span>
+            </button>
+          </div>
+        </header>
+
+        <section class="top-grid" aria-label="System overview">
+          <article class="panel controller-panel">
+            <div class="panel-title">Rachio Controller</div>
+            <div class="controller-lockup">
+              <div class="brand-mark small">r</div>
               <strong id="controller-name">Loading</strong>
-              <span id="controller-detail">Checking system</span>
+            </div>
+            <div id="controller-status" class="inline-status">Checking system</div>
+            <dl class="compact-list">
+              <div>
+                <dt>Controller ID</dt>
+                <dd id="controller-id">--</dd>
+              </div>
+              <div>
+                <dt>Timezone</dt>
+                <dd id="controller-timezone">--</dd>
+              </div>
+            </dl>
+          </article>
+
+          <article class="panel watering-panel">
+            <div class="panel-title">Watering Now</div>
+            <h2 id="active-zone-name">No active zone</h2>
+            <div class="run-grid">
+              <div>
+                <span>Time Remaining</span>
+                <strong id="active-zone-time">--</strong>
+              </div>
+              <div>
+                <span>Started</span>
+                <strong id="active-zone-start">--</strong>
+              </div>
+              <div>
+                <span>Ends</span>
+                <strong id="active-zone-end">--</strong>
+              </div>
+            </div>
+            <div class="run-meter" aria-hidden="true"><span id="active-zone-meter"></span></div>
+            <div class="action-row">
+              <button id="pause-button" class="ghost-button" type="button" disabled>Pause</button>
+              <button id="stop-all-button" class="danger-button" type="button">Stop All</button>
             </div>
           </article>
-          <article class="metric-panel">
-            <span class="label">Active Zone</span>
-            <strong id="active-zone">None</strong>
-            <span id="active-zone-detail">Idle</span>
-          </article>
-          <article class="metric-panel">
-            <span class="label">Next Run</span>
-            <strong id="next-run">--</strong>
-            <span id="next-run-detail">No schedule loaded</span>
-          </article>
-          <article class="metric-panel">
-            <span class="label">Zones</span>
-            <strong id="zone-count">--</strong>
-            <span id="zone-count-detail">Enabled</span>
-          </article>
-        </section>
 
-        <section id="setup-banner" class="setup-banner hidden" aria-live="polite">
-          <div>
-            <strong>Demo data is showing</strong>
-            <span>Add `RACHIO_API_TOKEN` on the server to connect the live controller.</span>
-          </div>
-        </section>
-
-        <div class="workspace-grid">
-          <section class="zones-section" aria-labelledby="zones-heading">
-            <div class="section-heading">
+          <article id="weather" class="panel weather-panel">
+            <div class="panel-title">Live Weather</div>
+            <div class="weather-main">
+              <strong id="weather-temp">--</strong>
               <div>
-                <span class="label">Manual Control</span>
-                <h2 id="zones-heading">Zones</h2>
+                <span id="weather-condition">Weather loading</span>
+                <small id="weather-location">National Weather Service</small>
+              </div>
+            </div>
+            <div class="weather-stats">
+              <div><span id="weather-humidity">--</span><small>Humidity</small></div>
+              <div><span id="weather-wind">--</span><small>Wind</small></div>
+              <div><span id="weather-gust">--</span><small>Gust</small></div>
+              <div><span id="weather-rain">--</span><small>Rain Today</small></div>
+              <div><span id="weather-pressure">--</span><small>Pressure</small></div>
+            </div>
+          </article>
+
+          <article class="panel recommendation-panel">
+            <div class="panel-title">Watering Recommendation</div>
+            <h2 id="recommendation-title">Checking weather</h2>
+            <p id="recommendation-detail">Loading irrigation recommendation.</p>
+            <ul id="recommendation-list" class="check-list"></ul>
+          </article>
+
+          <article class="panel next-window-panel">
+            <div class="panel-title">Next Allowed Window</div>
+            <h2 id="next-window">--</h2>
+            <p id="watering-days">Allowed days loading</p>
+            <p id="watering-hours" class="muted-line">Restricted hours loading</p>
+          </article>
+        </section>
+
+        <section class="dashboard-grid">
+          <article class="panel zone-panel" id="zones">
+            <div class="panel-heading">
+              <div>
+                <div class="panel-title">Zone Status</div>
+                <h2 id="zone-count-title">-- zones</h2>
               </div>
               <select id="device-select" aria-label="Controller"></select>
             </div>
-            <div id="zones-grid" class="zones-grid" aria-live="polite"></div>
-          </section>
+            <div id="zone-grid" class="zone-grid" aria-live="polite"></div>
+            <div class="legend">
+              <span><i class="running"></i>Running</span>
+              <span><i class="scheduled"></i>Ready</span>
+              <span><i class="off"></i>Off</span>
+              <span><i class="delay"></i>Delay</span>
+            </div>
+          </article>
 
-          <aside class="side-rail">
-            <section class="panel" aria-labelledby="schedules-heading">
-              <div class="section-heading compact">
-                <div>
-                  <span class="label">Automation</span>
-                  <h2 id="schedules-heading">Schedules</h2>
-                </div>
+          <article class="panel map-panel" id="yard">
+            <div class="panel-heading">
+              <div>
+                <div class="panel-title">Yard Map</div>
+                <h2>Property View</h2>
               </div>
-              <div id="schedule-list" class="schedule-list"></div>
-            </section>
+              <span class="map-hint">Schematic zone layout</span>
+            </div>
+            <div id="yard-map" class="yard-map" aria-label="Schematic yard map"></div>
+          </article>
 
-            <section class="panel" aria-labelledby="activity-heading">
-              <div class="section-heading compact">
-                <div>
-                  <span class="label">Recent</span>
-                  <h2 id="activity-heading">Activity</h2>
-                </div>
+          <div class="right-stack">
+            <article class="panel rules-panel" id="rules">
+              <div class="panel-title">Watering Rules</div>
+              <dl class="rule-list">
+                <div><dt>Stage</dt><dd id="rule-stage">--</dd></div>
+                <div><dt>Watering Days</dt><dd id="rule-days">--</dd></div>
+                <div><dt>No Outdoor Watering</dt><dd id="rule-hours">--</dd></div>
+                <div><dt>Note</dt><dd id="rule-note">--</dd></div>
+              </dl>
+            </article>
+
+            <article class="panel conditions-panel">
+              <div class="panel-title">Rachio vs Weather Conditions</div>
+              <table>
+                <thead>
+                  <tr><th>Condition</th><th>Rachio</th><th>Weather</th><th>Status</th></tr>
+                </thead>
+                <tbody id="condition-table"></tbody>
+              </table>
+            </article>
+
+            <article class="panel decision-panel">
+              <div class="panel-title">Decision Logic</div>
+              <ul id="decision-list" class="check-list compact"></ul>
+            </article>
+
+            <article class="panel quick-panel" id="actions">
+              <div class="panel-title">Quick Actions</div>
+              <div class="quick-grid">
+                <button id="run-first-zone-button" type="button">Run Zone</button>
+                <button id="refresh-weather-button" type="button">Refresh</button>
+                <button id="delay-button" type="button" disabled>Delay 24h</button>
+                <button id="resume-button" type="button" disabled>Resume</button>
               </div>
-              <ol id="activity-list" class="activity-list"></ol>
-            </section>
-          </aside>
-        </div>
+            </article>
+          </div>
+
+          <article class="panel schedule-panel" id="schedule">
+            <div class="panel-title">Upcoming Schedule</div>
+            <div id="schedule-list" class="data-list"></div>
+          </article>
+
+          <article class="panel activity-panel">
+            <div class="panel-title">Recent Activity</div>
+            <div id="activity-list" class="data-list"></div>
+          </article>
+
+          <article class="panel rainfall-panel">
+            <div class="panel-heading">
+              <div>
+                <div class="panel-title">Rainfall</div>
+                <h2>Last 7 Days</h2>
+              </div>
+              <span id="rain-total" class="map-hint">-- total</span>
+            </div>
+            <div id="rainfall-chart" class="rainfall-chart"></div>
+          </article>
+        </section>
+
+        <footer class="dashboard-footer">
+          <span>Weather provided by the National Weather Service.</span>
+          <span>Local watering rules should be verified before changing schedules.</span>
+        </footer>
       </main>
     </div>
-
-    <template id="zone-card-template">
-      <article class="zone-card">
-        <div class="zone-card-head">
-          <div>
-            <span class="zone-number"></span>
-            <h3></h3>
-          </div>
-          <span class="zone-state"></span>
-        </div>
-        <div class="zone-meter" aria-hidden="true">
-          <span></span>
-        </div>
-        <dl class="zone-facts">
-          <div>
-            <dt>Planting</dt>
-            <dd class="zone-type"></dd>
-          </div>
-          <div>
-            <dt>Soil</dt>
-            <dd class="zone-soil"></dd>
-          </div>
-          <div>
-            <dt>Coverage</dt>
-            <dd class="zone-efficiency"></dd>
-          </div>
-        </dl>
-        <div class="zone-actions" role="group" aria-label="Watering duration">
-          <button type="button" data-duration="300">5m</button>
-          <button type="button" data-duration="600">10m</button>
-          <button type="button" data-duration="1200">20m</button>
-          <button type="button" data-stop>Stop</button>
-        </div>
-      </article>
-    </template>
 
     <script src="/app.js" defer></script>
   </body>
