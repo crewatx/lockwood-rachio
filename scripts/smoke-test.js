@@ -8,7 +8,8 @@ function startServer(port, extraEnv = {}) {
     ...process.env,
     ...extraEnv,
     PORT: String(port),
-    DEMO_MODE: "true"
+    DEMO_MODE: "true",
+    WEATHER_TIMEOUT_MS: process.env.WEATHER_TIMEOUT_MS || "250"
   };
   return spawn(process.execPath, ["server.js"], { env, stdio: "pipe" });
 }
@@ -62,7 +63,7 @@ async function withServer(port, extraEnv, assertions) {
 
 async function runOpenMode(port) {
   const home = await request(port, "/");
-  assert(home.status === 200 && home.data.includes("Rachio Ocean"), `Expected dashboard HTML, got ${home.status}`);
+  assert(home.status === 200 && home.data.includes("Lockwood Rachio"), `Expected dashboard HTML, got ${home.status}`);
 
   const session = await request(port, "/api/session");
   const sessionPayload = JSON.parse(session.data);
