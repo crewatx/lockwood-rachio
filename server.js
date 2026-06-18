@@ -1,7 +1,7 @@
 const http = require("node:http");
+const crypto = require("node:crypto");
 const fs = require("node:fs/promises");
 const path = require("node:path");
-const { fileURLToPath } = require("node:url");
 
 const root = __dirname;
 const publicDir = path.join(root, "public");
@@ -9,6 +9,10 @@ const port = Number(process.env.PORT || 8080);
 const rachioBaseUrl = process.env.RACHIO_BASE_URL || "https://api.rach.io/1/public";
 const rachioToken = process.env.RACHIO_API_TOKEN || "";
 const demoMode = process.env.DEMO_MODE !== "false";
+const dashboardPassword = process.env.DASHBOARD_PASSWORD || "";
+const sessionSecret = process.env.SESSION_SECRET || dashboardPassword || "dev-session-secret";
+const sessionMaxAgeSeconds = Number(process.env.SESSION_MAX_AGE_SECONDS || 60 * 60 * 12);
+const sessionCookieName = "rachio_dashboard_session";
 
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
@@ -45,9 +49,46 @@ server.listen(port, () => {
 
 async function handleApi(req, res, url) {
   if (req.method === "GET" && url.pathname === "/api/health") {
-    sendJson(res, 200, { ok: true, hasToken: Boolean(rachioToken), demoMode: isDemoActive() });
+    const authenticated = isAuthenticated(req);
+    sendJson(res, 200, {
+      ok: true,
+      hasToken: authRequired() ? authenticated && Boolean(rachioToken) : Boolean(rachioToken),
+      demoMode: isDemoActive(),
+      authRequired: authRequired(),
+      authenticated
+    });
     return;
   }
+
+  if (req.method === "GET" && url.pathname === "/api/session") {
+    sendJson(res, 200, {
+      authRequired: authRequired(),
+      authenticated: isAuthenticated(req)
+    });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/login") {
+    const body = await readJsonBody(req);
+    if (!authRequired()) {
+      sendJson(res, 200, { ok: true, authRequired: false, authenticated: true });
+      return;
+    }
+    if (!passwordMatches(body.password)) {
+      throw publicError(401, "Invalid password");
+    }
+    setSessionCookie(req, res);
+    sendJson(res, 200, { ok: true, authRequired: true, authenticated: true });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/logout") {
+    clearSessionCookie(req, res);
+    sendJson(res, 200, { ok: true, authRequired: authRequired(), authenticated: false });
+    return;
+  }
+
+  requireAuth(req);
 
   if (req.method === "GET" && url.pathname === "/api/bootstrap") {
     sendJson(res, 200, await getBootstrapData());
@@ -486,6 +527,84 @@ function findDemoZone(zoneId) {
 
 function isDemoActive() {
   return demoMode && !rachioToken;
+}
+
+function authRequired() {
+  return Boolean(dashboardPassword);
+}
+
+function requireAuth(req) {
+  if (authRequired() && !isAuthenticated(req)) {
+    throw publicError(401, "Password required");
+  }
+}
+
+function isAuthenticated(req) {
+  if (!authRequired()) return true;
+  const cookies = parseCookies(req.headers.cookie || "");
+  return verifySessionCookie(cookies[sessionCookieName]);
+}
+
+function passwordMatches(value) {
+  if (typeof value !== "string" || !dashboardPassword) return false;
+  return safeEqual(value, dashboardPassword);
+}
+
+function setSessionCookie(req, res) {
+  const expiresAt = Date.now() + sessionMaxAgeSeconds * 1000;
+  const signature = signSession(expiresAt);
+  const secure = isHttpsRequest(req) ? "; Secure" : "";
+  res.setHeader(
+    "Set-Cookie",
+    `${sessionCookieName}=${expiresAt}.${signature}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${sessionMaxAgeSeconds}${secure}`
+  );
+}
+
+function clearSessionCookie(req, res) {
+  const secure = isHttpsRequest(req) ? "; Secure" : "";
+  res.setHeader(
+    "Set-Cookie",
+    `${sessionCookieName}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secure}`
+  );
+}
+
+function verifySessionCookie(value) {
+  if (!value || typeof value !== "string") return false;
+  const [expiresAt, signature] = value.split(".");
+  const expiresAtNumber = Number(expiresAt);
+  if (!Number.isFinite(expiresAtNumber) || expiresAtNumber <= Date.now() || !signature) {
+    return false;
+  }
+  return safeEqual(signature, signSession(expiresAt));
+}
+
+function signSession(expiresAt) {
+  return crypto.createHmac("sha256", sessionSecret).update(String(expiresAt)).digest("base64url");
+}
+
+function parseCookies(header) {
+  return Object.fromEntries(
+    header
+      .split(";")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .map((item) => {
+        const index = item.indexOf("=");
+        if (index === -1) return [item, ""];
+        return [decodeURIComponent(item.slice(0, index)), decodeURIComponent(item.slice(index + 1))];
+      })
+  );
+}
+
+function isHttpsRequest(req) {
+  return req.headers["x-forwarded-proto"] === "https" || req.socket.encrypted;
+}
+
+function safeEqual(left, right) {
+  const leftBuffer = Buffer.from(String(left));
+  const rightBuffer = Buffer.from(String(right));
+  if (leftBuffer.length !== rightBuffer.length) return false;
+  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
 }
 
 function normalizeDuration(value) {
