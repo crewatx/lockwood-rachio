@@ -20,12 +20,23 @@ RACHIO_API_TOKEN=your-token
 
 The token is only read by `server.js`; it is never sent to the browser.
 
+## Protect The Dashboard
+
+Set `DASHBOARD_PASSWORD` before connecting live irrigation controls:
+
+```bash
+DASHBOARD_PASSWORD=choose-a-strong-password
+```
+
+When this value is set, the dashboard requires a password before any Rachio data or watering controls can be used. Login is stored in an HTTP-only signed cookie. You can optionally set `SESSION_SECRET` to a separate random string for signing cookies.
+
 ## DigitalOcean App Platform
 
 1. Push this project to GitHub.
 2. Create a new DigitalOcean App from the repo.
 3. Set the environment variable `RACHIO_API_TOKEN`.
-4. Use:
+4. Set `DASHBOARD_PASSWORD` as a secret.
+5. Use:
    - Build command: none
    - Run command: `npm start`
    - HTTP port: `8080`
