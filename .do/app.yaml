@@ -1,0 +1,20 @@
+name: rachio-ocean-dashboard
+services:
+  - name: web
+    environment_slug: node-js
+    github:
+      repo: crewatx/lockwood-rachio
+      branch: main
+      deploy_on_push: true
+    run_command: npm start
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    envs:
+      - key: RACHIO_API_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+        value: replace-in-digitalocean
+      - key: DEMO_MODE
+        scope: RUN_TIME
+        value: "false"
