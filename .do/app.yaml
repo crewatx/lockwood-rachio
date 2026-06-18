@@ -18,3 +18,7 @@ services:
       - key: DEMO_MODE
         scope: RUN_TIME
         value: "false"
+      - key: DASHBOARD_PASSWORD
+        scope: RUN_TIME
+        type: SECRET
+        value: replace-in-digitalocean
