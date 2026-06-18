@@ -41,10 +41,10 @@ const server = http.createServer((req, res) => {
 
       const chunks = [];
       upstreamRes.on("data", (chunk) => chunks.push(chunk));
-      upstreamRes.on("end", () => {
+      upstreamRes.on("end", async () => {
         const body = Buffer.concat(chunks).toString("utf8");
         try {
-          const payload = scrubBootstrap(JSON.parse(body));
+          const payload = await scrubBootstrap(JSON.parse(body));
           const json = JSON.stringify(payload);
           const responseHeaders = { ...upstreamRes.headers, "content-length": Buffer.byteLength(json) };
           delete responseHeaders["transfer-encoding"];
@@ -71,7 +71,7 @@ server.listen(publicPort, () => {
   console.log(`Rachio dashboard proxy listening on http://localhost:${publicPort}`);
 });
 
-function scrubBootstrap(payload) {
+async function scrubBootstrap(payload) {
   if (!payload || payload.demo || !Array.isArray(payload.devices)) {
     return payload;
   }
@@ -109,7 +109,67 @@ function scrubBootstrap(payload) {
     };
   }
 
+  await refreshWeatherObservation(payload);
+
   return payload;
+}
+
+async function refreshWeatherObservation(payload) {
+  const weather = payload.weather;
+  const station = weather?.station;
+  if (!station || weather.source !== "National Weather Service") return;
+
+  try {
+    const response = await fetch(
+      `https://api.weather.gov/stations/${encodeURIComponent(station)}/observations/latest`,
+      {
+        headers: {
+          Accept: "application/geo+json, application/json",
+          "User-Agent":
+            process.env.WEATHER_USER_AGENT ||
+            "lockwood-rachio-dashboard (https://github.com/crewatx/lockwood-rachio)"
+        }
+      }
+    );
+    if (!response.ok) return;
+
+    const observation = await response.json();
+    const props = observation.properties || {};
+    const windMph = speedToMph(props.windSpeed);
+    const gustMph = speedToMph(props.windGust);
+    if (windMph !== null) {
+      weather.windMph = roundNumber(windMph);
+    }
+    if (gustMph !== null) {
+      weather.gustMph = roundNumber(gustMph);
+    }
+    weather.updatedAt = props.timestamp || weather.updatedAt;
+  } catch {
+    repairLegacyWindUnits(weather);
+  }
+}
+
+function speedToMph(quantity) {
+  const value = Number(quantity?.value);
+  if (!Number.isFinite(value)) return null;
+
+  const unit = normalizeText(quantity?.unitCode || quantity?.unit || "");
+  if (unit.includes("km_h") || unit.includes("km/h")) return value / 1.609344;
+  if (unit.includes("m_s") || unit.includes("m/s")) return value * 2.236936;
+  if (unit.includes("mi_h") || unit.includes("mph")) return value;
+  if (unit.includes("kn")) return value * 1.15078;
+
+  return value / 1.609344;
+}
+
+function repairLegacyWindUnits(weather) {
+  if (!weather || weather.source !== "National Weather Service") return;
+  if (Number(weather.windMph) >= 30) {
+    weather.windMph = roundNumber(Number(weather.windMph) / 3.6);
+  }
+  if (Number(weather.gustMph) >= 30) {
+    weather.gustMph = roundNumber(Number(weather.gustMph) / 3.6);
+  }
 }
 
 function isCredibleLiveRun(currentRun) {
@@ -125,6 +185,12 @@ function normalizeText(value) {
   return String(value || "")
     .trim()
     .toLowerCase();
+}
+
+function roundNumber(value, decimals = 0) {
+  if (!Number.isFinite(Number(value))) return null;
+  const factor = 10 ** decimals;
+  return Math.round(Number(value) * factor) / factor;
 }
 
 function shutdown() {
