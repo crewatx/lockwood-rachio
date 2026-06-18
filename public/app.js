@@ -1,10 +1,17 @@
 const state = {
   data: null,
   selectedDeviceId: null,
-  busyZoneId: null
+  busyZoneId: null,
+  session: null
 };
 
 const elements = {
+  authScreen: document.querySelector("#auth-screen"),
+  dashboardShell: document.querySelector("#dashboard-shell"),
+  loginForm: document.querySelector("#login-form"),
+  loginError: document.querySelector("#login-error"),
+  passwordInput: document.querySelector("#password-input"),
+  logoutButton: document.querySelector("#logout-button"),
   connectionPill: document.querySelector("#connection-pill"),
   refreshButton: document.querySelector("#refresh-button"),
   setupBanner: document.querySelector("#setup-banner"),
@@ -24,13 +31,65 @@ const elements = {
 };
 
 elements.refreshButton.addEventListener("click", () => loadDashboard());
+elements.loginForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  login();
+});
+elements.logoutButton.addEventListener("click", () => logout());
 elements.deviceSelect.addEventListener("change", (event) => {
   state.selectedDeviceId = event.target.value;
   render();
 });
 
-loadDashboard();
-window.setInterval(() => loadDashboard({ quiet: true }), 60_000);
+init();
+window.setInterval(() => {
+  if (state.session?.authenticated) {
+    loadDashboard({ quiet: true });
+  }
+}, 60_000);
+
+async function init() {
+  try {
+    state.session = await api("/api/session", { skipAuthRedirect: true });
+    if (state.session.authenticated) {
+      showDashboard();
+      await loadDashboard();
+    } else {
+      showLogin();
+    }
+  } catch (error) {
+    elements.loginError.textContent = error.message;
+    showLogin();
+  }
+}
+
+async function login() {
+  elements.loginError.textContent = "";
+  const password = elements.passwordInput.value;
+  elements.loginForm.classList.add("is-loading");
+  try {
+    state.session = await api("/api/login", {
+      method: "POST",
+      body: { password },
+      skipAuthRedirect: true
+    });
+    elements.passwordInput.value = "";
+    showDashboard();
+    await loadDashboard();
+  } catch (error) {
+    elements.loginError.textContent = error.message;
+    elements.passwordInput.select();
+  } finally {
+    elements.loginForm.classList.remove("is-loading");
+  }
+}
+
+async function logout() {
+  await api("/api/logout", { method: "POST", skipAuthRedirect: true }).catch(() => null);
+  state.data = null;
+  state.session = { authRequired: true, authenticated: false };
+  showLogin();
+}
 
 async function loadDashboard(options = {}) {
   setLoading(true, options.quiet);
@@ -271,9 +330,25 @@ async function api(path, options = {}) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if (response.status === 401 && !options.skipAuthRedirect) {
+      state.session = { authRequired: true, authenticated: false };
+      showLogin();
+    }
     throw new Error(payload.error || `Request failed with ${response.status}`);
   }
   return payload;
+}
+
+function showLogin() {
+  elements.authScreen.classList.remove("hidden");
+  elements.dashboardShell.classList.add("hidden");
+  window.setTimeout(() => elements.passwordInput.focus(), 0);
+}
+
+function showDashboard() {
+  elements.authScreen.classList.add("hidden");
+  elements.dashboardShell.classList.remove("hidden");
+  elements.logoutButton.classList.toggle("hidden", !state.session?.authRequired);
 }
 
 function getSelectedDevice() {
