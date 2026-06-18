@@ -110,6 +110,7 @@ async function scrubBootstrap(payload) {
   }
 
   await refreshWeatherObservation(payload);
+  await refreshDailyForecast(payload);
 
   return payload;
 }
@@ -160,6 +161,82 @@ function speedToMph(quantity) {
   if (unit.includes("kn")) return value * 1.15078;
 
   return value / 1.609344;
+}
+
+async function refreshDailyForecast(payload) {
+  const weather = payload.weather;
+  const device = payload.devices?.[0];
+  const latitude = Number(device?.latitude);
+  const longitude = Number(device?.longitude);
+  if (!weather || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+
+  try {
+    const point = await weatherFetch(`https://api.weather.gov/points/${latitude.toFixed(4)},${longitude.toFixed(4)}`);
+    const forecastUrl = point.properties?.forecast;
+    if (!forecastUrl) return;
+    const forecast = await weatherFetch(forecastUrl);
+    const periods = forecast.properties?.periods || [];
+    weather.forecast = periods.slice(0, 14).map((period) => ({
+      name: period.name,
+      startTime: period.startTime,
+      temperature: period.temperature,
+      shortForecast: period.shortForecast,
+      precipitationChance: period.probabilityOfPrecipitation?.value ?? null
+    }));
+    weather.dailyForecast = buildDailyForecast(periods);
+  } catch {
+    weather.dailyForecast = buildDailyForecast(weather.forecast || []);
+  }
+}
+
+async function weatherFetch(url) {
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/geo+json, application/json",
+      "User-Agent":
+        process.env.WEATHER_USER_AGENT || "lockwood-rachio-dashboard (https://github.com/crewatx/lockwood-rachio)"
+    }
+  });
+  if (!response.ok) {
+    throw new Error(`Weather.gov returned ${response.status}`);
+  }
+  return response.json();
+}
+
+function buildDailyForecast(periods) {
+  const groups = new Map();
+  for (const period of periods) {
+    const date = period.startTime ? new Date(period.startTime) : null;
+    if (!date || Number.isNaN(date.getTime())) continue;
+    const key = date.toISOString().slice(0, 10);
+    const existing = groups.get(key) || {
+      date: key,
+      high: null,
+      low: null,
+      precipitationChance: null,
+      shortForecast: ""
+    };
+
+    const temp = Number(period.temperature);
+    if (Number.isFinite(temp)) {
+      existing.high = existing.high === null ? temp : Math.max(existing.high, temp);
+      existing.low = existing.low === null ? temp : Math.min(existing.low, temp);
+    }
+
+    const rain = Number(period.probabilityOfPrecipitation?.value ?? period.precipitationChance);
+    if (Number.isFinite(rain)) {
+      existing.precipitationChance =
+        existing.precipitationChance === null ? rain : Math.max(existing.precipitationChance, rain);
+    }
+
+    if (!existing.shortForecast && period.shortForecast) {
+      existing.shortForecast = period.shortForecast;
+    }
+
+    groups.set(key, existing);
+  }
+
+  return [...groups.values()].slice(0, 7);
 }
 
 function repairLegacyWindUnits(weather) {
