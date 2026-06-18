@@ -62,7 +62,7 @@ The included `.do/app.yaml` can be used as a starting point if you prefer app sp
 
 ## API Routes
 
-- `GET /api/bootstrap` loads person, controller, zone, and schedule data.
+- `GET /api/bootstrap` loads person, controller, zone, schedule, weather, recommendation, and local rule data.
 - `POST /api/zones/:id/start` starts a zone. Body: `{ "duration": 600 }`.
 - `POST /api/zones/:id/stop` stops a zone.
 - `POST /api/devices/:id/stop` stops all watering on a device when supported by the Rachio API.
