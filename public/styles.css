@@ -199,8 +199,14 @@ select:focus {
 }
 
 .dashboard-main {
+  width: min(100%, 1540px);
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 10px;
+  margin: 0 auto;
   padding: 16px;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 .dashboard-header,
@@ -213,7 +219,6 @@ select:focus {
 .dashboard-header {
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 12px;
 }
 
 .dashboard-header h1,
@@ -302,15 +307,19 @@ select:focus {
 
 .top-grid {
   display: grid;
-  grid-template-columns: minmax(220px, 0.9fr) minmax(290px, 1.15fr) minmax(300px, 1.25fr) minmax(240px, 0.95fr) minmax(220px, 0.85fr);
+  grid-template-columns: minmax(210px, 0.9fr) minmax(280px, 1.12fr) minmax(290px, 1.2fr) minmax(230px, 0.96fr) minmax(210px, 0.82fr);
   gap: 10px;
-  margin-bottom: 10px;
 }
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: 360px minmax(440px, 1fr) 390px;
-  align-items: start;
+  min-height: 0;
+  grid-template-columns: minmax(330px, 0.84fr) minmax(520px, 1.32fr) minmax(340px, 0.92fr);
+  grid-template-rows: minmax(430px, 1fr) minmax(205px, 0.42fr);
+  grid-template-areas:
+    "left map right"
+    "left bottom right";
+  align-items: stretch;
   gap: 10px;
 }
 
@@ -343,7 +352,7 @@ select:focus {
 .recommendation-panel,
 .next-window-panel,
 .watering-panel {
-  min-height: 178px;
+  min-height: 158px;
 }
 
 .controller-lockup {
@@ -530,7 +539,10 @@ dd {
 }
 
 .left-stack {
+  grid-area: left;
   display: grid;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 10px;
 }
 
@@ -656,12 +668,15 @@ dd {
 }
 
 .map-panel {
-  min-height: 470px;
+  grid-area: map;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .yard-map {
   position: relative;
-  min-height: 412px;
+  min-height: 0;
   overflow: hidden;
   border: 1px solid rgba(93, 164, 194, 0.22);
   border-radius: 8px;
@@ -731,7 +746,10 @@ dd {
 }
 
 .right-stack {
+  grid-area: right;
   display: grid;
+  min-height: 0;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   gap: 10px;
 }
 
@@ -781,7 +799,19 @@ td.note {
 .forecast-panel,
 .schedule-panel,
 .activity-panel {
-  min-height: 225px;
+  min-height: 0;
+}
+
+.forecast-panel {
+  overflow: hidden;
+}
+
+.bottom-strip {
+  grid-area: bottom;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
 .forecast-panel h2 {
@@ -861,6 +891,10 @@ td.note {
   border-bottom: 1px solid rgba(93, 164, 194, 0.14);
 }
 
+.bottom-strip .data-row {
+  padding: 6px 0;
+}
+
 .data-row strong {
   overflow-wrap: anywhere;
   font-size: 0.84rem;
@@ -870,6 +904,12 @@ td.note {
   grid-column: 1;
   color: var(--muted);
   font-size: 0.78rem;
+}
+
+.bottom-strip .data-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .data-row em {
@@ -946,20 +986,34 @@ td.note {
 }
 
 @media (max-width: 1320px) {
+  .dashboard-main {
+    min-height: 100vh;
+  }
+
   .top-grid,
   .dashboard-grid {
     grid-template-columns: 1fr 1fr;
   }
 
-  .weather-panel,
-  .left-stack,
-  .map-panel {
+  .dashboard-grid {
+    grid-template-areas:
+      "left map"
+      "right right"
+      "bottom bottom";
+    grid-template-rows: auto;
+  }
+
+  .weather-panel {
     grid-column: 1 / -1;
   }
 
   .right-stack {
-    grid-column: 1 / -1;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: auto;
+  }
+
+  .yard-map {
+    min-height: 380px;
   }
 }
 
@@ -998,8 +1052,17 @@ td.note {
 
   .top-grid,
   .dashboard-grid,
-  .right-stack {
+  .right-stack,
+  .bottom-strip {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-grid {
+    grid-template-areas:
+      "left"
+      "map"
+      "right"
+      "bottom";
   }
 
   .weather-panel,
