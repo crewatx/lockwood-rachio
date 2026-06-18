@@ -138,7 +138,9 @@ async function getBootstrapData() {
   }
 
   const person = await rachioFetch(`/person/${encodeURIComponent(info.id)}`);
-  return hydrateDashboardData(normalizePerson(person, false));
+  const data = normalizePerson(person, false);
+  await hydrateCurrentRuns(data);
+  return hydrateDashboardData(data);
 }
 
 async function hydrateDashboardData(data) {
@@ -283,7 +285,7 @@ function normalizeDevice(device) {
     ? device.scheduleRules.filter((rule) => !rule.deleted).map((rule) => normalizeSchedule(rule, zones))
     : [];
 
-  return {
+  const normalizedDevice = {
     id: device.id,
     name: device.name || "Rachio Controller",
     model: device.model || "Rachio",
@@ -294,13 +296,16 @@ function normalizeDevice(device) {
     timeZone: device.timeZone || device.timezone || "",
     rainDelayExpirationDate: device.rainDelayExpirationDate || null,
     on: Boolean(device.on),
+    currentRun: null,
     zones,
     scheduleRules,
     raw: {
       serialNumber: device.serialNumber,
-      macAddress: device.macAddress
+      macAddress: device.macAddress,
+      currentSchedule: device.currentSchedule || device.current_schedule || null
     }
   };
+  return applyCurrentRunToDevice(normalizedDevice, normalizeCurrentRun(device, normalizedDevice));
 }
 
 function normalizeZone(zone, device) {
@@ -367,6 +372,201 @@ function buildActivity(device) {
     });
   }
   return events;
+}
+
+async function hydrateCurrentRuns(data) {
+  await Promise.all(
+    (data.devices || []).map(async (device) => {
+      if (!device.on || device.currentRun) return;
+      const currentSchedule = await getCurrentSchedule(device.id);
+      if (currentSchedule) {
+        applyCurrentRunToDevice(device, normalizeCurrentRun(currentSchedule, device));
+      }
+    })
+  );
+}
+
+async function getCurrentSchedule(deviceId) {
+  try {
+    return await rachioFetch(`/device/${encodeURIComponent(deviceId)}/current_schedule`);
+  } catch {
+    return null;
+  }
+}
+
+function applyCurrentRunToDevice(device, currentRun) {
+  const matchedZone = matchCurrentRunZone(currentRun, device.zones || []);
+  const normalizedRun = currentRun
+    ? {
+        ...currentRun,
+        zoneId: currentRun.zoneId || matchedZone?.id || null,
+        zoneName: currentRun.zoneName || matchedZone?.name || "Active watering",
+        zoneNumber: currentRun.zoneNumber || matchedZone?.number || null
+      }
+    : null;
+
+  device.currentRun = normalizedRun;
+  device.zones = (device.zones || []).map((zone) => {
+    const running =
+      Boolean(normalizedRun) &&
+      ((normalizedRun.zoneId && zone.id === normalizedRun.zoneId) ||
+        normalizeText(zone.name) === normalizeText(normalizedRun.zoneName));
+    return {
+      ...zone,
+      running,
+      runningStartedAt: running ? normalizedRun.startedAt : null,
+      runningUntil: running ? normalizedRun.endsAt : null,
+      runningDuration: running ? normalizedRun.duration : null
+    };
+  });
+  return device;
+}
+
+function normalizeCurrentRun(source, device) {
+  const sources = collectCurrentRunCandidates(source);
+  for (const candidate of sources) {
+    const zoneId = firstDefined(
+      candidate.zoneId,
+      candidate.zone_id,
+      candidate.currentZoneId,
+      candidate.current_zone_id,
+      candidate.activeZoneId,
+      candidate.active_zone_id,
+      candidate.zone?.id,
+      candidate.zone?.zoneId,
+      candidate.zone?.zone_id,
+      candidate.zones?.[0]?.id,
+      candidate.zones?.[0]?.zoneId,
+      candidate.zones?.[0]?.zone_id,
+      candidate.zoneRun?.zoneId,
+      candidate.zoneRun?.zone_id,
+      candidate.run?.zoneId,
+      candidate.run?.zone_id
+    );
+    const zoneName = firstDefined(
+      candidate.zoneName,
+      candidate.zone_name,
+      candidate.currentZoneName,
+      candidate.current_zone_name,
+      candidate.activeZoneName,
+      candidate.active_zone_name,
+      candidate.name,
+      candidate.zone?.name,
+      candidate.zones?.[0]?.name,
+      candidate.zoneRun?.zoneName,
+      candidate.zoneRun?.zone_name,
+      candidate.run?.zoneName,
+      candidate.run?.zone_name
+    );
+    const matchedZone = matchCurrentRunZone({ zoneId, zoneName }, device.zones || []);
+    const startedAt = parseDateValue(
+      firstDefined(
+        candidate.startedAt,
+        candidate.started_at,
+        candidate.startTime,
+        candidate.start_time,
+        candidate.startDate,
+        candidate.start_date,
+        candidate.start
+      )
+    );
+    const duration = normalizeRunDuration(
+      firstDefined(
+        candidate.duration,
+        candidate.durationSeconds,
+        candidate.duration_seconds,
+        candidate.totalDuration,
+        candidate.total_duration,
+        candidate.runTime,
+        candidate.runtime
+      )
+    );
+    const remaining = normalizeRunDuration(
+      firstDefined(candidate.remainingDuration, candidate.remaining_duration, candidate.remainingSeconds)
+    );
+    const endsAt =
+      parseDateValue(
+        firstDefined(
+          candidate.endsAt,
+          candidate.ends_at,
+          candidate.endTime,
+          candidate.end_time,
+          candidate.endDate,
+          candidate.end_date,
+          candidate.expectedEndTime,
+          candidate.expected_end_time,
+          candidate.end
+        )
+      ) ||
+      (startedAt && duration ? new Date(new Date(startedAt).getTime() + duration * 1000).toISOString() : null) ||
+      (remaining ? new Date(Date.now() + remaining * 1000).toISOString() : null);
+
+    if (zoneId || zoneName || matchedZone || endsAt || device.on) {
+      return {
+        zoneId: zoneId || matchedZone?.id || null,
+        zoneName: zoneName || matchedZone?.name || null,
+        zoneNumber: matchedZone?.number || null,
+        startedAt,
+        endsAt,
+        duration,
+        source: "rachio"
+      };
+    }
+  }
+  return null;
+}
+
+function collectCurrentRunCandidates(source) {
+  if (!source || typeof source !== "object") return [];
+  const queue = [
+    source.currentSchedule,
+    source.current_schedule,
+    source.currentRun,
+    source.current_run,
+    source.current,
+    source.watering,
+    source.activeZone,
+    source.active_zone,
+    source.schedule,
+    source.run,
+    source
+  ];
+  return queue.filter((item) => item && typeof item === "object");
+}
+
+function matchCurrentRunZone(currentRun, zones) {
+  if (!currentRun) return null;
+  if (currentRun.zoneId) {
+    const byId = zones.find((zone) => zone.id === currentRun.zoneId);
+    if (byId) return byId;
+  }
+  if (currentRun.zoneName) {
+    const name = normalizeText(currentRun.zoneName);
+    return zones.find((zone) => normalizeText(zone.name) === name) || null;
+  }
+  return null;
+}
+
+function firstDefined(...values) {
+  return values.find((value) => value !== undefined && value !== null && value !== "");
+}
+
+function parseDateValue(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function normalizeRunDuration(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return null;
+  return Math.round(number);
+}
+
+function normalizeText(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
 }
 
 async function getWeatherForDevice(device) {
@@ -653,8 +853,26 @@ function getDemoBootstrap() {
     zones: device.zones.map((zone) => ({
       ...zone,
       running: demoState.running?.zoneId === zone.id,
-      runningUntil: demoState.running?.zoneId === zone.id ? demoState.running.endsAt : null
+      runningStartedAt: demoState.running?.zoneId === zone.id ? demoState.running.startedAt : null,
+      runningUntil: demoState.running?.zoneId === zone.id ? demoState.running.endsAt : null,
+      runningDuration: demoState.running?.zoneId === zone.id ? demoState.running.duration : null
     }))
+  }));
+  const runningZone = person.devices.flatMap((device) => device.zones || []).find((zone) => zone.running);
+  person.devices = person.devices.map((device) => ({
+    ...device,
+    currentRun:
+      runningZone && runningZone.deviceId === device.id
+        ? {
+            zoneId: runningZone.id,
+            zoneName: runningZone.name,
+            zoneNumber: runningZone.number,
+            startedAt: runningZone.runningStartedAt,
+            endsAt: runningZone.runningUntil,
+            duration: runningZone.runningDuration,
+            source: "demo"
+          }
+        : null
   }));
   person.activity = [...demoState.activity, ...person.activity].slice(0, 8);
   return person;
