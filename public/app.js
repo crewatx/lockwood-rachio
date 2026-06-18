@@ -96,6 +96,7 @@ elements.runFirstZoneButton.addEventListener("click", () => runFirstEnabledZone(
 init();
 updateClock();
 window.setInterval(updateClock, 30_000);
+window.setInterval(updateActiveWateringPanel, 1000);
 window.setInterval(() => {
   if (state.session?.authenticated) {
     loadDashboard({ quiet: true });
@@ -168,12 +169,13 @@ async function startZone(zoneId, duration) {
       method: "POST",
       body: { duration }
     });
-    await loadDashboard({ quiet: true });
+    markZoneRunning(zoneId, duration);
+    window.setTimeout(() => loadDashboard({ quiet: true }), 2500);
   } catch (error) {
     showActionError(error);
   } finally {
     state.busyZoneId = null;
-    renderZones();
+    render();
   }
 }
 
@@ -182,12 +184,13 @@ async function stopZone(zoneId) {
   renderZones();
   try {
     await api(`/api/zones/${encodeURIComponent(zoneId)}/stop`, { method: "POST" });
-    await loadDashboard({ quiet: true });
+    markZoneStopped(zoneId);
+    window.setTimeout(() => loadDashboard({ quiet: true }), 2500);
   } catch (error) {
     showActionError(error);
   } finally {
     state.busyZoneId = null;
-    renderZones();
+    render();
   }
 }
 
@@ -197,7 +200,9 @@ async function stopAllWatering() {
   elements.stopAllButton.disabled = true;
   try {
     await api(`/api/devices/${encodeURIComponent(device.id)}/stop`, { method: "POST" });
-    await loadDashboard({ quiet: true });
+    markAllZonesStopped(device.id);
+    render();
+    window.setTimeout(() => loadDashboard({ quiet: true }), 2500);
   } catch (error) {
     showActionError(error);
   } finally {
@@ -230,7 +235,7 @@ function render() {
 }
 
 function renderSystem(device, zones) {
-  const runningZone = zones.find((zone) => zone.running);
+  const activeRun = getActiveWatering(device, zones);
   const online = device?.status !== "offline";
   elements.dashboardTitle.textContent = `${zones.length || "--"} Zone System`;
   elements.controllerName.textContent = device?.name || "No controller";
@@ -239,8 +244,8 @@ function renderSystem(device, zones) {
   elements.controllerId.textContent = device?.id ? shortId(device.id) : "--";
   elements.controllerTimezone.textContent = device?.timeZone || "--";
   elements.zoneCountTitle.textContent = `${zones.length || 0} zones`;
-  elements.systemPill.textContent = runningZone ? "Watering Active" : online ? "System Healthy" : "System Offline";
-  elements.systemPill.className = `status-pill ${runningZone ? "active" : online ? "healthy" : "error"}`;
+  elements.systemPill.textContent = activeRun ? "Watering Active" : online ? "System Healthy" : "System Offline";
+  elements.systemPill.className = `status-pill ${activeRun ? "active" : online ? "healthy" : "error"}`;
 }
 
 function renderDeviceSelect() {
@@ -258,8 +263,8 @@ function renderDeviceSelect() {
 }
 
 function renderWateringNow(device, zones) {
-  const runningZone = zones.find((zone) => zone.running);
-  if (!runningZone) {
+  const activeRun = getActiveWatering(device, zones);
+  if (!activeRun) {
     elements.activeZoneName.textContent = "No active zone";
     elements.activeZoneTime.textContent = "--";
     elements.activeZoneStart.textContent = "--";
@@ -269,14 +274,23 @@ function renderWateringNow(device, zones) {
     return;
   }
 
-  elements.activeZoneName.textContent = `Zone ${runningZone.number || ""} - ${runningZone.name}`.trim();
-  const endsAt = runningZone.runningUntil ? new Date(runningZone.runningUntil) : null;
+  elements.activeZoneName.textContent = activeRun.number
+    ? `Zone ${activeRun.number} - ${activeRun.name}`
+    : activeRun.name || "Active watering";
+  const startsAt = activeRun.startedAt ? new Date(activeRun.startedAt) : null;
+  const endsAt = activeRun.endsAt ? new Date(activeRun.endsAt) : null;
   const remainingMs = endsAt ? Math.max(0, endsAt.getTime() - Date.now()) : null;
   elements.activeZoneTime.textContent = remainingMs === null ? "Running" : formatClockDuration(remainingMs);
-  elements.activeZoneStart.textContent = "--";
+  elements.activeZoneStart.textContent = startsAt ? formatTime(startsAt) : "--";
   elements.activeZoneEnd.textContent = endsAt ? formatTime(endsAt) : "--";
-  elements.activeZoneMeter.style.width = remainingMs === null ? "65%" : `${Math.max(8, Math.min(100, remainingMs / 6000))}%`;
+  elements.activeZoneMeter.style.width = `${activeRunProgress(activeRun)}%`;
   elements.pauseButton.disabled = true;
+}
+
+function updateActiveWateringPanel() {
+  if (!state.session?.authenticated || !state.data) return;
+  const device = getSelectedDevice();
+  renderWateringNow(device, device?.zones || []);
 }
 
 function renderWeather() {
@@ -459,6 +473,94 @@ function showActionError(error) {
   elements.systemPill.className = "status-pill error";
   elements.systemPill.textContent = error.message.slice(0, 30);
   window.setTimeout(() => renderSystem(getSelectedDevice(), getSelectedDevice()?.zones || []), 3000);
+}
+
+function getActiveWatering(device, zones) {
+  const runningZone = zones.find((zone) => zone.running);
+  if (runningZone) {
+    return {
+      zoneId: runningZone.id,
+      name: runningZone.name,
+      number: runningZone.number,
+      startedAt: runningZone.runningStartedAt || device?.currentRun?.startedAt || null,
+      endsAt: runningZone.runningUntil || device?.currentRun?.endsAt || null,
+      duration: runningZone.runningDuration || device?.currentRun?.duration || null
+    };
+  }
+
+  if (device?.currentRun) {
+    return {
+      zoneId: device.currentRun.zoneId || null,
+      name: device.currentRun.zoneName || "Active watering",
+      number: device.currentRun.zoneNumber || null,
+      startedAt: device.currentRun.startedAt || null,
+      endsAt: device.currentRun.endsAt || null,
+      duration: device.currentRun.duration || null
+    };
+  }
+
+  return null;
+}
+
+function activeRunProgress(activeRun) {
+  const endsAt = activeRun.endsAt ? new Date(activeRun.endsAt).getTime() : null;
+  const startsAt = activeRun.startedAt ? new Date(activeRun.startedAt).getTime() : null;
+  if (!Number.isFinite(endsAt) || !Number.isFinite(startsAt) || endsAt <= startsAt) {
+    return activeRun.endsAt ? 100 : 65;
+  }
+  const elapsed = Date.now() - startsAt;
+  const total = endsAt - startsAt;
+  return Math.max(6, Math.min(100, (elapsed / total) * 100));
+}
+
+function markZoneRunning(zoneId, duration) {
+  const device = getSelectedDevice();
+  const zone = device?.zones?.find((item) => item.id === zoneId);
+  if (!device || !zone) return;
+  const startedAt = new Date();
+  const endsAt = new Date(startedAt.getTime() + duration * 1000);
+  device.currentRun = {
+    zoneId,
+    zoneName: zone.name,
+    zoneNumber: zone.number,
+    startedAt: startedAt.toISOString(),
+    endsAt: endsAt.toISOString(),
+    duration,
+    source: "optimistic"
+  };
+  device.zones = device.zones.map((item) => ({
+    ...item,
+    running: item.id === zoneId,
+    runningStartedAt: item.id === zoneId ? device.currentRun.startedAt : null,
+    runningUntil: item.id === zoneId ? device.currentRun.endsAt : null,
+    runningDuration: item.id === zoneId ? duration : null
+  }));
+}
+
+function markZoneStopped(zoneId) {
+  const device = getSelectedDevice();
+  if (!device) return;
+  device.currentRun = device.currentRun?.zoneId === zoneId ? null : device.currentRun;
+  device.zones = device.zones.map((zone) => ({
+    ...zone,
+    running: zone.id === zoneId ? false : zone.running,
+    runningStartedAt: zone.id === zoneId ? null : zone.runningStartedAt,
+    runningUntil: zone.id === zoneId ? null : zone.runningUntil,
+    runningDuration: zone.id === zoneId ? null : zone.runningDuration
+  }));
+}
+
+function markAllZonesStopped(deviceId) {
+  const device = state.data?.devices?.find((item) => item.id === deviceId);
+  if (!device) return;
+  device.currentRun = null;
+  device.zones = device.zones.map((zone) => ({
+    ...zone,
+    running: false,
+    runningStartedAt: null,
+    runningUntil: null,
+    runningDuration: null
+  }));
 }
 
 function setLoading(loading, quiet) {
