@@ -11,7 +11,7 @@ function startServer(port, extraEnv = {}) {
     DEMO_MODE: "true",
     WEATHER_TIMEOUT_MS: process.env.WEATHER_TIMEOUT_MS || "250"
   };
-  return spawn(process.execPath, ["server.js"], { env, stdio: "pipe" });
+  return spawn(process.execPath, ["server-wrapper.js"], { env, stdio: "pipe" });
 }
 
 function request(port, path, method = "GET", body = null, headers = {}) {
@@ -80,6 +80,17 @@ async function runOpenMode(port) {
   const zoneId = payload.devices[0].zones[0].id;
   const start = await request(port, `/api/zones/${zoneId}/start`, "POST", { duration: 300 });
   assert(start.status === 200, `Expected start 200, got ${start.status}`);
+
+  const activeBootstrap = await request(port, "/api/bootstrap");
+  const activePayload = JSON.parse(activeBootstrap.data);
+  assert(activePayload.devices[0].currentRun?.zoneId === zoneId, "Expected manual start reflected in current run");
+
+  const stop = await request(port, `/api/devices/${payload.devices[0].id}/stop`, "POST");
+  assert(stop.status === 200, `Expected stop 200, got ${stop.status}`);
+  const stoppedBootstrap = await request(port, "/api/bootstrap");
+  const stoppedPayload = JSON.parse(stoppedBootstrap.data);
+  assert(!stoppedPayload.devices[0].currentRun, "Expected current run cleared after stop");
+  assert(stoppedPayload.devices[0].zones.every((zone) => !zone.running), "Expected all zones stopped");
 }
 
 async function runProtectedMode(port) {
