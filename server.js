@@ -13,6 +13,9 @@ const dashboardPassword = process.env.DASHBOARD_PASSWORD || "";
 const sessionSecret = process.env.SESSION_SECRET || dashboardPassword || "dev-session-secret";
 const sessionMaxAgeSeconds = Number(process.env.SESSION_MAX_AGE_SECONDS || 60 * 60 * 12);
 const sessionCookieName = "rachio_dashboard_session";
+const weatherUserAgent =
+  process.env.WEATHER_USER_AGENT || "lockwood-rachio-dashboard (https://github.com/crewatx/lockwood-rachio)";
+const weatherTimeoutMs = Number(process.env.WEATHER_TIMEOUT_MS || 3500);
 
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
@@ -126,7 +129,7 @@ async function handleApi(req, res, url) {
 
 async function getBootstrapData() {
   if (isDemoActive()) {
-    return getDemoBootstrap();
+    return hydrateDashboardData(getDemoBootstrap());
   }
 
   const info = await rachioFetch("/person/info");
@@ -135,7 +138,18 @@ async function getBootstrapData() {
   }
 
   const person = await rachioFetch(`/person/${encodeURIComponent(info.id)}`);
-  return normalizePerson(person, false);
+  return hydrateDashboardData(normalizePerson(person, false));
+}
+
+async function hydrateDashboardData(data) {
+  const primaryDevice = data.devices?.[0] || null;
+  const weather = await getWeatherForDevice(primaryDevice);
+  return {
+    ...data,
+    weather,
+    recommendation: buildRecommendation(data, weather),
+    rules: buildWateringRules(primaryDevice, weather)
+  };
 }
 
 async function startZone(zoneId, duration) {
@@ -353,6 +367,282 @@ function buildActivity(device) {
     });
   }
   return events;
+}
+
+async function getWeatherForDevice(device) {
+  const latitude = Number(device?.latitude);
+  const longitude = Number(device?.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return fallbackWeather("Controller location unavailable");
+  }
+
+  try {
+    const point = await weatherFetch(`https://api.weather.gov/points/${latitude.toFixed(4)},${longitude.toFixed(4)}`);
+    const properties = point.properties || {};
+    const hourly = await weatherFetch(properties.forecastHourly);
+    const forecast = await weatherFetch(properties.forecast);
+    const stations = await weatherFetch(properties.observationStations);
+    const stationFeature = stations.features?.[0] || null;
+    const stationUrl = stationFeature?.id || stationFeature?.properties?.["@id"];
+    const observation = stationUrl ? await weatherFetch(`${stationUrl}/observations/latest`) : null;
+    const history = stationUrl ? await getRainfallHistory(stationUrl) : [];
+
+    return normalizeWeather({
+      point: properties,
+      hourly,
+      forecast,
+      station: stationFeature?.properties,
+      observation: observation?.properties,
+      history
+    });
+  } catch (error) {
+    return fallbackWeather(error.message || "Weather source unavailable");
+  }
+}
+
+async function getRainfallHistory(stationUrl) {
+  const end = new Date();
+  const start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000);
+  try {
+    const observations = await weatherFetch(
+      `${stationUrl}/observations?start=${start.toISOString()}&end=${end.toISOString()}&limit=500`
+    );
+    return buildRainfallHistory(observations.features || []);
+  } catch {
+    return [];
+  }
+}
+
+async function weatherFetch(url) {
+  if (!url) {
+    throw new Error("Weather endpoint unavailable");
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), weatherTimeoutMs);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        Accept: "application/geo+json, application/json",
+        "User-Agent": weatherUserAgent
+      }
+    });
+    if (!response.ok) {
+      throw new Error(`Weather.gov returned ${response.status}`);
+    }
+    return response.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function normalizeWeather({ point, hourly, forecast, station, observation, history }) {
+  const currentPeriod = hourly?.properties?.periods?.[0] || {};
+  const forecastPeriods = forecast?.properties?.periods || [];
+  const hourlyPeriods = hourly?.properties?.periods || [];
+  const relativeLocation = point?.relativeLocation?.properties || {};
+  const city = relativeLocation.city || point?.cwa || "Local";
+  const state = relativeLocation.state || "";
+  const observationText = observation?.textDescription || currentPeriod.shortForecast || "Forecast unavailable";
+
+  return {
+    source: "National Weather Service",
+    status: "ok",
+    location: [city, state].filter(Boolean).join(", "),
+    station: station?.stationIdentifier || station?.name || "",
+    updatedAt: observation?.timestamp || currentPeriod.startTime || new Date().toISOString(),
+    temperatureF: roundNumber(cToF(observation?.temperature?.value) ?? currentPeriod.temperature),
+    humidity: roundNumber(observation?.relativeHumidity?.value),
+    windMph: roundNumber(mpsToMph(observation?.windSpeed?.value) ?? parseWindSpeed(currentPeriod.windSpeed)),
+    gustMph: roundNumber(mpsToMph(observation?.windGust?.value)),
+    pressureInHg: roundNumber(paToInHg(observation?.barometricPressure?.value), 2),
+    condition: observationText,
+    icon: currentPeriod.icon || "",
+    rainTodayIn: roundNumber(sumTodayRain(history), 2),
+    rainLastHourIn: roundNumber(mmToIn(observation?.precipitationLastHour?.value), 2),
+    forecast: forecastPeriods.slice(0, 6).map((period) => ({
+      name: period.name,
+      startTime: period.startTime,
+      temperature: period.temperature,
+      shortForecast: period.shortForecast,
+      precipitationChance: period.probabilityOfPrecipitation?.value ?? null
+    })),
+    hourly: hourlyPeriods.slice(0, 24).map((period) => ({
+      startTime: period.startTime,
+      temperature: period.temperature,
+      shortForecast: period.shortForecast,
+      precipitationChance: period.probabilityOfPrecipitation?.value ?? null,
+      windSpeed: period.windSpeed,
+      windDirection: period.windDirection
+    })),
+    rainfallHistory: history.length ? history : buildFallbackRainfallHistory(),
+    retrievedAt: new Date().toISOString()
+  };
+}
+
+function fallbackWeather(reason) {
+  return {
+    source: "National Weather Service",
+    status: "fallback",
+    reason,
+    location: "Local",
+    station: "",
+    updatedAt: new Date().toISOString(),
+    temperatureF: null,
+    humidity: null,
+    windMph: null,
+    gustMph: null,
+    pressureInHg: null,
+    condition: "Weather unavailable",
+    rainTodayIn: null,
+    rainLastHourIn: null,
+    forecast: [],
+    hourly: [],
+    rainfallHistory: buildFallbackRainfallHistory(),
+    retrievedAt: new Date().toISOString()
+  };
+}
+
+function buildRainfallHistory(features) {
+  const days = new Map();
+  for (let index = 6; index >= 0; index -= 1) {
+    const date = new Date(Date.now() - index * 24 * 60 * 60 * 1000);
+    const key = date.toISOString().slice(0, 10);
+    days.set(key, { date: key, amount: 0 });
+  }
+
+  for (const feature of features) {
+    const props = feature.properties || {};
+    const timestamp = props.timestamp || props.rawMessage;
+    const date = timestamp ? new Date(timestamp) : null;
+    if (!date || Number.isNaN(date.getTime())) continue;
+    const key = date.toISOString().slice(0, 10);
+    if (!days.has(key)) continue;
+    const precipitation = mmToIn(props.precipitationLastHour?.value);
+    if (Number.isFinite(precipitation)) {
+      days.get(key).amount += precipitation;
+    }
+  }
+
+  return [...days.values()].map((day) => ({ ...day, amount: roundNumber(day.amount, 2) }));
+}
+
+function buildFallbackRainfallHistory() {
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(Date.now() - (6 - index) * 24 * 60 * 60 * 1000);
+    return { date: date.toISOString().slice(0, 10), amount: null };
+  });
+}
+
+function buildRecommendation(data, weather) {
+  const nextRain = (weather.hourly || []).find((hour) => Number(hour.precipitationChance) >= 50);
+  const rainToday = Number(weather.rainTodayIn || 0);
+  const temp = Number(weather.temperatureF);
+  const humidity = Number(weather.humidity);
+  const wind = Number(weather.windMph);
+  const runningZone = data.devices?.flatMap((device) => device.zones || []).find((zone) => zone.running);
+
+  if (runningZone) {
+    return {
+      tone: "active",
+      title: `Watering ${runningZone.name}`,
+      detail: "Monitor the active run and stop if rain develops.",
+      bullets: ["Manual controls are available", "Weather is checked from NWS", "Follow local watering rules"]
+    };
+  }
+
+  if (rainToday >= 0.15) {
+    return {
+      tone: "delay",
+      title: "Delay after rain",
+      detail: `${rainToday.toFixed(2)} in recorded today.`,
+      bullets: ["Recent rain can reduce irrigation need", "Check soil before running zones", "Resume on the next allowed window"]
+    };
+  }
+
+  if (nextRain) {
+    return {
+      tone: "delay",
+      title: "Rain possible soon",
+      detail: `${nextRain.precipitationChance}% chance around ${nextRain.startTime}.",
+      bullets: ["Forecast shows elevated rain chance", "Wait for the next forecast update", "Use manual watering only if needed"]
+    };
+  }
+
+  if (temp >= 90 && humidity <= 45 && wind <= 18) {
+    return {
+      tone: "run",
+      title: "Water on schedule",
+      detail: "Hot, dry conditions support normal watering.",
+      bullets: ["No near-term rain signal", "Avoid mid-day watering", "Use the next allowed window"]
+    };
+  }
+
+  return {
+    tone: "normal",
+    title: "Use normal schedule",
+    detail: "No weather delay is currently recommended.",
+    bullets: ["Review zone moisture needs", "Avoid restricted hours", "Recheck weather before manual runs"]
+  };
+}
+
+function buildWateringRules(device, weather) {
+  const now = new Date();
+  const nextWindow = new Date(now);
+  if (now.getHours() >= 19) {
+    nextWindow.setDate(now.getDate() + 1);
+    nextWindow.setHours(19, 0, 0, 0);
+  } else if (now.getHours() >= 10) {
+    nextWindow.setHours(19, 0, 0, 0);
+  } else {
+    nextWindow.setHours(7, 0, 0, 0);
+  }
+
+  return {
+    label: weather.location ? `${weather.location} watering guide` : "Watering guide",
+    stage: "Configured",
+    allowedDays: process.env.WATERING_DAYS || "Mon, Wed, Sat",
+    restrictedHours: process.env.RESTRICTED_WATERING_HOURS || "10:00 AM - 7:00 PM",
+    nextAllowedWindow: nextWindow.toISOString(),
+    note: "Verify current municipal restrictions before changing schedules."
+  };
+}
+
+function sumTodayRain(history) {
+  const today = new Date().toISOString().slice(0, 10);
+  return history.find((day) => day.date === today)?.amount ?? null;
+}
+
+function parseWindSpeed(value) {
+  if (!value) return null;
+  const match = String(value).match(/\d+/);
+  return match ? Number(match[0]) : null;
+}
+
+function cToF(value) {
+  if (!Number.isFinite(Number(value))) return null;
+  return (Number(value) * 9) / 5 + 32;
+}
+
+function mpsToMph(value) {
+  if (!Number.isFinite(Number(value))) return null;
+  return Number(value) * 2.236936;
+}
+
+function paToInHg(value) {
+  if (!Number.isFinite(Number(value))) return null;
+  return Number(value) * 0.0002953;
+}
+
+function mmToIn(value) {
+  if (!Number.isFinite(Number(value))) return null;
+  return Number(value) / 25.4;
+}
+
+function roundNumber(value, decimals = 0) {
+  if (!Number.isFinite(Number(value))) return null;
+  const factor = 10 ** decimals;
+  return Math.round(Number(value) * factor) / factor;
 }
 
 function getDemoBootstrap() {
