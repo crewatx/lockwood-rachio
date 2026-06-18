@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rachio Ocean</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <span></span>
+          </div>
+          <div>
+            <p>Rachio Ocean</p>
+            <h1>Irrigation Dashboard</h1>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <span id="connection-pill" class="pill neutral">Loading</span>
+          <button id="refresh-button" class="icon-button" type="button" title="Refresh dashboard" aria-label="Refresh dashboard">
+            <span aria-hidden="true">&#8635;</span>
+          </button>
+        </div>
+      </header>
+
+      <main>
+        <section class="overview-grid" aria-label="Overview">
+          <article class="metric-panel controller-panel">
+            <span class="label">Controller</span>
+            <div>
+              <strong id="controller-name">Loading</strong>
+              <span id="controller-detail">Checking system</span>
+            </div>
+          </article>
+          <article class="metric-panel">
+            <span class="label">Active Zone</span>
+            <strong id="active-zone">None</strong>
+            <span id="active-zone-detail">Idle</span>
+          </article>
+          <article class="metric-panel">
+            <span class="label">Next Run</span>
+            <strong id="next-run">--</strong>
+            <span id="next-run-detail">No schedule loaded</span>
+          </article>
+          <article class="metric-panel">
+            <span class="label">Zones</span>
+            <strong id="zone-count">--</strong>
+            <span id="zone-count-detail">Enabled</span>
+          </article>
+        </section>
+
+        <section id="setup-banner" class="setup-banner hidden" aria-live="polite">
+          <div>
+            <strong>Demo data is showing</strong>
+            <span>Add `RACHIO_API_TOKEN` on the server to connect the live controller.</span>
+          </div>
+        </section>
+
+        <div class="workspace-grid">
+          <section class="zones-section" aria-labelledby="zones-heading">
+            <div class="section-heading">
+              <div>
+                <span class="label">Manual Control</span>
+                <h2 id="zones-heading">Zones</h2>
+              </div>
+              <select id="device-select" aria-label="Controller"></select>
+            </div>
+            <div id="zones-grid" class="zones-grid" aria-live="polite"></div>
+          </section>
+
+          <aside class="side-rail">
+            <section class="panel" aria-labelledby="schedules-heading">
+              <div class="section-heading compact">
+                <div>
+                  <span class="label">Automation</span>
+                  <h2 id="schedules-heading">Schedules</h2>
+                </div>
+              </div>
+              <div id="schedule-list" class="schedule-list"></div>
+            </section>
+
+            <section class="panel" aria-labelledby="activity-heading">
+              <div class="section-heading compact">
+                <div>
+                  <span class="label">Recent</span>
+                  <h2 id="activity-heading">Activity</h2>
+                </div>
+              </div>
+              <ol id="activity-list" class="activity-list"></ol>
+            </section>
+          </aside>
+        </div>
+      </main>
+    </div>
+
+    <template id="zone-card-template">
+      <article class="zone-card">
+        <div class="zone-card-head">
+          <div>
+            <span class="zone-number"></span>
+            <h3></h3>
+          </div>
+          <span class="zone-state"></span>
+        </div>
+        <div class="zone-meter" aria-hidden="true">
+          <span></span>
+        </div>
+        <dl class="zone-facts">
+          <div>
+            <dt>Planting</dt>
+            <dd class="zone-type"></dd>
+          </div>
+          <div>
+            <dt>Soil</dt>
+            <dd class="zone-soil"></dd>
+          </div>
+          <div>
+            <dt>Coverage</dt>
+            <dd class="zone-efficiency"></dd>
+          </div>
+        </dl>
+        <div class="zone-actions" role="group" aria-label="Watering duration">
+          <button type="button" data-duration="300">5m</button>
+          <button type="button" data-duration="600">10m</button>
+          <button type="button" data-duration="1200">20m</button>
+          <button type="button" data-stop>Stop</button>
+        </div>
+      </article>
+    </template>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>
