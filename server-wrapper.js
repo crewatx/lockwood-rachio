@@ -1,0 +1,143 @@
+const http = require("node:http");
+const { spawn } = require("node:child_process");
+
+const publicPort = Number(process.env.PORT || 8080);
+const upstreamPort = Number(process.env.UPSTREAM_PORT || publicPort + 1);
+const upstreamHost = "127.0.0.1";
+
+const child = spawn(process.execPath, ["server.js"], {
+  env: {
+    ...process.env,
+    PORT: String(upstreamPort)
+  },
+  stdio: ["ignore", "inherit", "inherit"]
+});
+
+const server = http.createServer((req, res) => {
+  const headers = {
+    ...req.headers,
+    host: `${upstreamHost}:${upstreamPort}`
+  };
+  delete headers.connection;
+
+  const upstreamReq = http.request(
+    {
+      hostname: upstreamHost,
+      port: upstreamPort,
+      path: req.url,
+      method: req.method,
+      headers
+    },
+    (upstreamRes) => {
+      const contentType = String(upstreamRes.headers["content-type"] || "");
+      const shouldScrub =
+        req.method === "GET" && req.url?.startsWith("/api/bootstrap") && contentType.includes("application/json");
+
+      if (!shouldScrub) {
+        res.writeHead(upstreamRes.statusCode || 502, upstreamRes.headers);
+        upstreamRes.pipe(res);
+        return;
+      }
+
+      const chunks = [];
+      upstreamRes.on("data", (chunk) => chunks.push(chunk));
+      upstreamRes.on("end", () => {
+        const body = Buffer.concat(chunks).toString("utf8");
+        try {
+          const payload = scrubBootstrap(JSON.parse(body));
+          const json = JSON.stringify(payload);
+          const responseHeaders = { ...upstreamRes.headers, "content-length": Buffer.byteLength(json) };
+          delete responseHeaders["transfer-encoding"];
+          delete responseHeaders.connection;
+          res.writeHead(upstreamRes.statusCode || 200, responseHeaders);
+          res.end(json);
+        } catch {
+          res.writeHead(upstreamRes.statusCode || 502, upstreamRes.headers);
+          res.end(body);
+        }
+      });
+    }
+  );
+
+  upstreamReq.on("error", () => {
+    res.writeHead(502, { "content-type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ error: "Dashboard service is starting" }));
+  });
+
+  req.pipe(upstreamReq);
+});
+
+server.listen(publicPort, () => {
+  console.log(`Rachio dashboard proxy listening on http://localhost:${publicPort}`);
+});
+
+function scrubBootstrap(payload) {
+  if (!payload || payload.demo || !Array.isArray(payload.devices)) {
+    return payload;
+  }
+
+  payload.devices = payload.devices.map((device) => {
+    const currentRun = isCredibleLiveRun(device.currentRun) ? device.currentRun : null;
+    const zoneId = currentRun?.zoneId || null;
+    const zoneName = normalizeText(currentRun?.zoneName);
+
+    return {
+      ...device,
+      currentRun,
+      zones: (device.zones || []).map((zone) => {
+        const running =
+          Boolean(currentRun) &&
+          ((zoneId && zone.id === zoneId) || (zoneName && normalizeText(zone.name) === zoneName));
+        return {
+          ...zone,
+          running,
+          runningStartedAt: running ? currentRun.startedAt || null : null,
+          runningUntil: running ? currentRun.endsAt || null : null,
+          runningDuration: running ? currentRun.duration || null : null
+        };
+      })
+    };
+  });
+
+  const hasRunningZone = payload.devices.some((device) => (device.zones || []).some((zone) => zone.running));
+  if (!hasRunningZone && payload.recommendation?.tone === "active") {
+    payload.recommendation = {
+      tone: "normal",
+      title: "Use normal schedule",
+      detail: "No active watering run is currently confirmed.",
+      bullets: ["Manual controls are available", "Weather is checked from NWS", "Follow local watering rules"]
+    };
+  }
+
+  return payload;
+}
+
+function isCredibleLiveRun(currentRun) {
+  if (!currentRun || typeof currentRun !== "object") return false;
+  return hasValidDate(currentRun.startedAt) || hasValidDate(currentRun.endsAt);
+}
+
+function hasValidDate(value) {
+  return Boolean(value && Number.isFinite(new Date(value).getTime()));
+}
+
+function normalizeText(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+function shutdown() {
+  server.close(() => process.exit(0));
+  if (!child.killed) {
+    child.kill();
+  }
+}
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
+child.on("exit", (code) => {
+  if (code && code !== 0) {
+    process.exit(code);
+  }
+});
