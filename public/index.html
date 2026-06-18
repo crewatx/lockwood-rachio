@@ -7,7 +7,25 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <div class="app-shell">
+    <section id="auth-screen" class="auth-screen hidden" aria-labelledby="auth-heading">
+      <form id="login-form" class="auth-card">
+        <div class="brand auth-brand">
+          <div class="brand-mark" aria-hidden="true">
+            <span></span>
+          </div>
+          <div>
+            <p>Rachio Ocean</p>
+            <h1 id="auth-heading">Dashboard Login</h1>
+          </div>
+        </div>
+        <label for="password-input">Password</label>
+        <input id="password-input" name="password" type="password" autocomplete="current-password" required />
+        <p id="login-error" class="auth-error" role="alert"></p>
+        <button id="login-button" type="submit">Unlock Dashboard</button>
+      </form>
+    </section>
+
+    <div id="dashboard-shell" class="app-shell hidden">
       <header class="topbar">
         <div class="brand">
           <div class="brand-mark" aria-hidden="true">
@@ -20,6 +38,7 @@
         </div>
         <div class="topbar-actions">
           <span id="connection-pill" class="pill neutral">Loading</span>
+          <button id="logout-button" class="secondary-button hidden" type="button">Sign Out</button>
           <button id="refresh-button" class="icon-button" type="button" title="Refresh dashboard" aria-label="Refresh dashboard">
             <span aria-hidden="true">&#8635;</span>
           </button>
