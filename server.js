@@ -564,7 +564,7 @@ function buildRecommendation(data, weather) {
     return {
       tone: "delay",
       title: "Rain possible soon",
-      detail: `${nextRain.precipitationChance}% chance around ${nextRain.startTime}.",
+      detail: `${nextRain.precipitationChance}% chance around ${nextRain.startTime}.`,
       bullets: ["Forecast shows elevated rain chance", "Wait for the next forecast update", "Use manual watering only if needed"]
     };
   }
