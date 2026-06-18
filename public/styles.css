@@ -33,7 +33,7 @@ body {
   min-height: 100vh;
   color: var(--text);
   font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background:
     radial-gradient(circle at 18% 8%, rgba(45, 169, 255, 0.18), transparent 32%),
     linear-gradient(135deg, #04101a 0%, #062334 48%, #03101a 100%);
@@ -404,11 +404,11 @@ dd {
   font-size: 1.35rem;
 }
 
-.recommendation-panel h2[data-tone="delay"] {
+.recommendation-panel h2[data-tone='delay'] {
   color: var(--yellow);
 }
 
-.recommendation-panel h2[data-tone="active"] {
+.recommendation-panel h2[data-tone='active'] {
   color: var(--blue);
 }
 
@@ -515,7 +515,7 @@ dd {
 }
 
 .check-list li::before {
-  content: "";
+  content: '';
   position: absolute;
   left: 0;
   top: 0.5em;
@@ -540,53 +540,52 @@ dd {
 
 .zone-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 14px;
 }
 
 .zone-tile {
   min-width: 0;
-  min-height: 58px;
+  min-height: 34px;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  grid-template-rows: auto auto;
-  gap: 2px 7px;
-  padding: 7px;
-  border: 1px solid rgba(93, 164, 194, 0.24);
-  border-radius: 8px;
-  background: rgba(6, 25, 38, 0.7);
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(93, 164, 194, 0.18);
 }
 
 .zone-tile strong {
-  grid-row: 1 / span 2;
-  align-self: center;
-  width: 20px;
-  font-size: 1rem;
+  color: #bcd9e6;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
   line-height: 1;
 }
 
 .zone-copy {
   min-width: 0;
-  display: grid;
-  gap: 1px;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
 }
 
 .zone-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   font-weight: 750;
 }
 
 .zone-tile small {
+  flex: 0 0 auto;
   color: var(--muted);
-  font-size: 0.68rem;
+  font-size: 0.7rem;
+  font-weight: 750;
 }
 
 .zone-tile.running {
-  border-color: rgba(110, 227, 66, 0.8);
-  box-shadow: inset 0 0 0 1px rgba(110, 227, 66, 0.22);
+  border-bottom-color: rgba(110, 227, 66, 0.44);
 }
 
 .zone-tile.scheduled strong,
@@ -600,22 +599,21 @@ dd {
 }
 
 .zone-tile.off {
-  opacity: 0.62;
+  opacity: 0.58;
 }
 
 .zone-tile-actions {
-  grid-column: 2;
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 0;
-  margin-top: 2px;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .zone-tile-actions button {
   min-width: 0;
-  min-height: 22px;
-  padding: 0 4px;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
   font-size: 0.68rem;
+  line-height: 1;
 }
 
 .legend {
