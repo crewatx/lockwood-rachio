@@ -24,7 +24,7 @@ The token is only read by `server.js`; it is never sent to the browser.
 
 ## Weather And Watering Rules
 
-Weather data comes from Weather.gov / the National Weather Service. The app uses the controller latitude and longitude to load forecast, hourly precipitation chance, current station observations, pressure, wind, and rainfall history when available.
+Weather data comes from Weather.gov / the National Weather Service for current conditions, forecast, hourly precipitation chance, pressure, and wind. The rainfall history chart uses Open-Meteo hourly precipitation totals because current NWS station precipitation observations can under-report smaller totals.
 
 Optional settings:
 
@@ -62,7 +62,7 @@ The included `.do/app.yaml` can be used as a starting point if you prefer app sp
 
 ## API Routes
 
-- `GET /api/bootstrap` loads person, controller, zone, schedule, weather, recommendation, and local rule data.
+- `GET /api/bootstrap` loads person, controller, zone, and schedule data.
 - `POST /api/zones/:id/start` starts a zone. Body: `{ "duration": 600 }`.
 - `POST /api/zones/:id/stop` stops a zone.
 - `POST /api/devices/:id/stop` stops all watering on a device when supported by the Rachio API.
