@@ -74,6 +74,8 @@ async function runOpenMode(port) {
   assert(bootstrap.status === 200, `Expected bootstrap 200, got ${bootstrap.status}`);
   const payload = JSON.parse(bootstrap.data);
   assert(payload.devices?.length && payload.devices[0].zones?.length, "Expected demo devices and zones");
+  assert(payload.devices[0].currentRun?.zoneId, "Expected current run metadata");
+  assert(payload.devices[0].zones.some((zone) => zone.running && zone.runningUntil), "Expected running zone timing");
 
   const zoneId = payload.devices[0].zones[0].id;
   const start = await request(port, `/api/zones/${zoneId}/start`, "POST", { duration: 300 });
