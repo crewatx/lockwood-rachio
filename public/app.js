@@ -75,6 +75,9 @@ const elements = {
   decisionList: document.querySelector("#decision-list"),
   scheduleList: document.querySelector("#schedule-list"),
   activityList: document.querySelector("#activity-list"),
+  forecastGrid: document.querySelector("#forecast-grid"),
+  forecastSummary: document.querySelector("#forecast-summary"),
+  forecastUpdated: document.querySelector("#forecast-updated"),
   rainfallChart: document.querySelector("#rainfall-chart"),
   rainTotal: document.querySelector("#rain-total")
 };
@@ -231,6 +234,7 @@ function render() {
   renderConditionTable();
   renderSchedules(device);
   renderActivity();
+  renderForecast();
   renderRainfall();
 }
 
@@ -339,8 +343,10 @@ function renderZones() {
       card.className = `zone-tile ${status}`;
       card.innerHTML = `
         <strong></strong>
-        <span class="zone-name"></span>
-        <small></small>
+        <div class="zone-copy">
+          <span class="zone-name"></span>
+          <small></small>
+        </div>
         <div class="zone-tile-actions"></div>
       `;
       card.querySelector("strong").textContent = zone.number || "--";
@@ -350,7 +356,8 @@ function renderZones() {
       const actions = card.querySelector(".zone-tile-actions");
       const actionButton = document.createElement("button");
       actionButton.type = "button";
-      actionButton.textContent = zone.running ? "Stop" : "Run 5m";
+      actionButton.textContent = zone.running ? "Stop" : "Run";
+      actionButton.title = zone.running ? `Stop ${zone.name}` : `Run ${zone.name} for 5 minutes`;
       actionButton.disabled = (!zone.running && !zone.enabled) || state.busyZoneId === zone.id;
       actionButton.addEventListener("click", () => (zone.running ? stopZone(zone.id) : startZone(zone.id, 300)));
       actions.replaceChildren(actionButton);
@@ -441,6 +448,36 @@ function renderActivity() {
   );
 }
 
+function renderForecast() {
+  const weather = state.data?.weather || {};
+  const days = getForecastDays(weather);
+  if (!days.length) {
+    elements.forecastSummary.textContent = "Forecast unavailable";
+    elements.forecastUpdated.textContent = "--";
+    elements.forecastGrid.replaceChildren(emptyBlock("No forecast loaded."));
+    return;
+  }
+
+  const rainChances = days.map((day) => Number(day.precipitationChance)).filter(Number.isFinite);
+  const highestRain = rainChances.length ? Math.max(...rainChances) : null;
+  elements.forecastSummary.textContent =
+    highestRain === null ? "Rain outlook unavailable" : highestRain >= 50 ? `${highestRain}% rain chance ahead` : `${highestRain}% max rain chance`;
+  elements.forecastUpdated.textContent = weather.updatedAt ? `Updated ${formatTime(weather.updatedAt)}` : "NWS";
+  elements.forecastGrid.replaceChildren(
+    ...days.map((day) => {
+      const card = document.createElement("article");
+      const rainChance = Number(day.precipitationChance);
+      card.className = `forecast-day ${Number.isFinite(rainChance) && rainChance >= 50 ? "wet" : ""}`;
+      card.innerHTML = "<strong></strong><span></span><small></small><em></em>";
+      card.querySelector("strong").textContent = formatForecastDay(day.date || day.startTime || day.label);
+      card.querySelector("span").textContent = formatTempRange(day);
+      card.querySelector("small").textContent = day.shortForecast || day.condition || "Forecast pending";
+      card.querySelector("em").textContent = Number.isFinite(rainChance) ? `${rainChance}% rain` : "-- rain";
+      return card;
+    })
+  );
+}
+
 function renderRainfall() {
   const history = state.data?.weather?.rainfallHistory || [];
   const knownAmounts = history.map((item) => item.amount).filter((value) => Number.isFinite(Number(value)));
@@ -459,6 +496,44 @@ function renderRainfall() {
       return bar;
     })
   );
+}
+
+function getForecastDays(weather) {
+  if (Array.isArray(weather.dailyForecast) && weather.dailyForecast.length) {
+    return weather.dailyForecast.slice(0, 7);
+  }
+  return buildForecastDays(weather.forecast || []).slice(0, 7);
+}
+
+function buildForecastDays(periods) {
+  const groups = new Map();
+  for (const period of periods) {
+    const date = period.startTime ? new Date(period.startTime) : null;
+    if (!date || Number.isNaN(date.getTime())) continue;
+    const key = date.toISOString().slice(0, 10);
+    const existing = groups.get(key) || {
+      date: key,
+      high: null,
+      low: null,
+      precipitationChance: null,
+      shortForecast: ""
+    };
+    const temp = Number(period.temperature);
+    if (Number.isFinite(temp)) {
+      existing.high = existing.high === null ? temp : Math.max(existing.high, temp);
+      existing.low = existing.low === null ? temp : Math.min(existing.low, temp);
+    }
+    const rain = Number(period.precipitationChance);
+    if (Number.isFinite(rain)) {
+      existing.precipitationChance =
+        existing.precipitationChance === null ? rain : Math.max(existing.precipitationChance, rain);
+    }
+    if (!existing.shortForecast && period.shortForecast) {
+      existing.shortForecast = period.shortForecast;
+    }
+    groups.set(key, existing);
+  }
+  return [...groups.values()];
 }
 
 function renderError(error) {
@@ -699,6 +774,26 @@ function formatDuration(seconds) {
 
 function formatShortDay(date) {
   return new Intl.DateTimeFormat(undefined, { weekday: "short", month: "numeric", day: "numeric" }).format(new Date(date));
+}
+
+function formatForecastDay(value) {
+  const date = new Date(value);
+  if (!Number.isNaN(date.getTime())) {
+    return new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(date);
+  }
+  return String(value || "--").replace(/\s.*$/, "");
+}
+
+function formatTempRange(day) {
+  const high = Number(day.high ?? day.temperatureHigh ?? day.temperature);
+  const low = Number(day.low ?? day.temperatureLow);
+  if (Number.isFinite(high) && Number.isFinite(low) && high !== low) {
+    return `${Math.round(high)} / ${Math.round(low)}\u00b0`;
+  }
+  if (Number.isFinite(high)) {
+    return `${Math.round(high)}\u00b0`;
+  }
+  return "--";
 }
 
 function relativeTime(date) {
