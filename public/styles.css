@@ -309,7 +309,8 @@ select:focus {
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: 390px minmax(440px, 1fr) 390px;
+  grid-template-columns: 360px minmax(440px, 1fr) 390px;
+  align-items: start;
   gap: 10px;
 }
 
@@ -528,38 +529,59 @@ dd {
   font-size: 0.8rem;
 }
 
+.left-stack {
+  display: grid;
+  gap: 10px;
+}
+
 .zone-panel {
-  min-height: 470px;
+  min-height: 0;
 }
 
 .zone-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 
 .zone-tile {
   min-width: 0;
-  min-height: 88px;
+  min-height: 58px;
   display: grid;
-  gap: 3px;
-  padding: 10px;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  gap: 2px 7px;
+  padding: 7px;
   border: 1px solid rgba(93, 164, 194, 0.24);
   border-radius: 8px;
   background: rgba(6, 25, 38, 0.7);
 }
 
 .zone-tile strong {
-  font-size: 1.25rem;
+  grid-row: 1 / span 2;
+  align-self: center;
+  width: 20px;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.zone-copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
 }
 
 .zone-name {
-  overflow-wrap: anywhere;
-  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  font-weight: 750;
 }
 
 .zone-tile small {
   color: var(--muted);
+  font-size: 0.68rem;
 }
 
 .zone-tile.running {
@@ -582,25 +604,26 @@ dd {
 }
 
 .zone-tile-actions {
+  grid-column: 2;
   display: grid;
   grid-template-columns: 1fr;
-  gap: 5px;
-  margin-top: 5px;
+  gap: 0;
+  margin-top: 2px;
 }
 
 .zone-tile-actions button {
   min-width: 0;
-  min-height: 28px;
+  min-height: 22px;
   padding: 0 4px;
-  font-size: 0.74rem;
+  font-size: 0.68rem;
 }
 
 .legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 14px;
-  margin-top: 14px;
-  padding-top: 12px;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 9px;
   border-top: 1px solid rgba(93, 164, 194, 0.18);
   color: var(--muted);
   font-size: 0.75rem;
@@ -757,10 +780,74 @@ td.note {
   gap: 8px;
 }
 
+.forecast-panel,
 .schedule-panel,
-.activity-panel,
-.rainfall-panel {
+.activity-panel {
   min-height: 225px;
+}
+
+.forecast-panel h2 {
+  font-size: 1rem;
+}
+
+.forecast-grid {
+  display: grid;
+  gap: 6px;
+}
+
+.forecast-day {
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: 42px 58px minmax(0, 1fr) 64px;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 1px solid rgba(93, 164, 194, 0.18);
+  border-radius: 8px;
+  background: rgba(6, 22, 34, 0.5);
+}
+
+.forecast-day.wet {
+  border-color: rgba(45, 169, 255, 0.46);
+  background: rgba(45, 169, 255, 0.11);
+}
+
+.forecast-day strong,
+.forecast-day span,
+.forecast-day em {
+  font-size: 0.76rem;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.forecast-day strong {
+  color: var(--blue);
+}
+
+.forecast-day span {
+  color: var(--text);
+}
+
+.forecast-day small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.forecast-day em {
+  justify-self: end;
+  color: var(--green);
+}
+
+.forecast-day.wet em {
+  color: var(--yellow);
+}
+
+.rainfall-heading {
+  margin: 12px 0 6px;
 }
 
 .data-list {
@@ -805,6 +892,10 @@ td.note {
   gap: 8px;
 }
 
+.rainfall-chart.compact {
+  height: 96px;
+}
+
 .rain-bar {
   height: 140px;
   display: grid;
@@ -814,6 +905,10 @@ td.note {
   gap: 4px;
   color: var(--muted);
   font-size: 0.72rem;
+}
+
+.rainfall-chart.compact .rain-bar {
+  height: 88px;
 }
 
 .rain-bar span {
@@ -859,6 +954,7 @@ td.note {
   }
 
   .weather-panel,
+  .left-stack,
   .map-panel {
     grid-column: 1 / -1;
   }
@@ -909,6 +1005,7 @@ td.note {
   }
 
   .weather-panel,
+  .left-stack,
   .map-panel,
   .right-stack {
     grid-column: auto;
