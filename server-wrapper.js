@@ -110,6 +110,7 @@ async function scrubBootstrap(payload) {
   }
 
   await refreshWeatherObservation(payload);
+  await refreshRainfallHistory(payload);
   await refreshDailyForecast(payload);
 
   return payload;
@@ -189,6 +190,42 @@ async function refreshDailyForecast(payload) {
   }
 }
 
+async function refreshRainfallHistory(payload) {
+  const weather = payload.weather;
+  const device = payload.devices?.[0];
+  const latitude = Number(device?.latitude);
+  const longitude = Number(device?.longitude);
+  if (!weather || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+
+  try {
+    const url = new URL("https://api.open-meteo.com/v1/forecast");
+    url.searchParams.set("latitude", latitude.toFixed(4));
+    url.searchParams.set("longitude", longitude.toFixed(4));
+    url.searchParams.set("hourly", "precipitation");
+    url.searchParams.set("precipitation_unit", "inch");
+    url.searchParams.set("timezone", "auto");
+    url.searchParams.set("past_days", "6");
+    url.searchParams.set("forecast_days", "1");
+
+    const rainfall = await weatherFetch(url.toString());
+    const history = buildOpenMeteoRainfallHistory(rainfall);
+    if (!history.length) throw new Error("Rainfall history unavailable");
+
+    weather.rainfallHistory = history;
+    weather.rainfallSource = "Open-Meteo hourly precipitation";
+    weather.rainfallEstimated = true;
+    weather.rainfallUpdatedAt = new Date().toISOString();
+
+    const today = history.at(-1);
+    weather.rainTodayIn = Number.isFinite(Number(today?.amount)) ? today.amount : null;
+  } catch {
+    weather.rainfallHistory = buildUnavailableRainfallHistory();
+    weather.rainfallSource = "Unavailable";
+    weather.rainfallEstimated = true;
+    weather.rainTodayIn = null;
+  }
+}
+
 async function weatherFetch(url) {
   const response = await fetch(url, {
     headers: {
@@ -201,6 +238,51 @@ async function weatherFetch(url) {
     throw new Error(`Weather.gov returned ${response.status}`);
   }
   return response.json();
+}
+
+function buildOpenMeteoRainfallHistory(data) {
+  const hourly = data?.hourly || {};
+  const times = Array.isArray(hourly.time) ? hourly.time : [];
+  const amounts = Array.isArray(hourly.precipitation) ? hourly.precipitation : [];
+  const offsetSeconds = Number(data?.utc_offset_seconds) || 0;
+  const latestLocalHour = localHourKey(offsetSeconds);
+  const days = new Map();
+
+  for (let index = 6; index >= 0; index -= 1) {
+    const date = localDateKey(index, offsetSeconds);
+    days.set(date, { date, amount: 0, source: "Open-Meteo" });
+  }
+
+  times.forEach((time, index) => {
+    if (typeof time !== "string" || time > latestLocalHour) return;
+    const date = time.slice(0, 10);
+    if (!days.has(date)) return;
+
+    const amount = Number(amounts[index]);
+    if (Number.isFinite(amount) && amount > 0) {
+      days.get(date).amount += amount;
+    }
+  });
+
+  return [...days.values()].map((day) => ({ ...day, amount: roundNumber(day.amount, 2) }));
+}
+
+function buildUnavailableRainfallHistory() {
+  return Array.from({ length: 7 }, (_, index) => ({
+    date: localDateKey(6 - index, 0),
+    amount: null
+  }));
+}
+
+function localDateKey(daysAgo, offsetSeconds) {
+  const date = new Date(Date.now() + offsetSeconds * 1000 - daysAgo * 24 * 60 * 60 * 1000);
+  return date.toISOString().slice(0, 10);
+}
+
+function localHourKey(offsetSeconds) {
+  const date = new Date(Date.now() + offsetSeconds * 1000);
+  date.setUTCMinutes(0, 0, 0);
+  return date.toISOString().slice(0, 16);
 }
 
 function buildDailyForecast(periods) {
